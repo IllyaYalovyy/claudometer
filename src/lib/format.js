@@ -55,8 +55,9 @@ export function formatResetRow(resetsAt, now, {clock24}) {
 }
 
 // Stale ages read in "min"/"h min" (footer prose), unlike the terse
-// countdown units — §4.4 vs §4.3.
-function formatAge(ms) {
+// countdown units — §4.4 vs §4.3. Exported for the §8 stale qualifier in
+// the indicator's accessible name.
+export function formatAge(ms) {
     const hours = Math.floor(ms / HOUR_MS);
     const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS);
     if (hours === 0)

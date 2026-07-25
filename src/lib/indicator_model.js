@@ -1,0 +1,119 @@
+// Pure render model for the panel indicator: (snapshot, now, opts) -> what
+// the St widget should show, per designs/UX-DESIGN.md §3 and §8. All
+// decisions live here so they are unit-testable without St; the widget
+// (src/indicator.js) only applies the result. No Shell imports; importable
+// under plain `gjs -m`.
+//
+// Model shape:
+//   labelText      string to show, or null to hide the label
+//   styleClass     `claudometer-<state>` for the six §3.3 states
+//   opacity        1, or 0.55 for the dimmed stale/unavailable states
+//   accessibleName full §8 story, independent of display mode
+//   iconVariant    semantic icon token, or null to hide the icon:
+//                  'meter' | 'meter-alert' (the §3.3 `!` overlay) |
+//                  'hourglass' | 'meter-unavailable' (outline + slash)
+
+import {classify, constraintOf, LIMIT_HIT, STALE, UNAVAILABLE} from './derive.js';
+import {
+    formatAge,
+    formatCountdown,
+    formatPercent,
+    formatResetRow,
+} from './format.js';
+
+// §3.1/§7 display modes ("Indicator style" preference).
+export const ICON_AND_PERCENT = 'icon-and-percent';
+export const ICON_ONLY = 'icon-only';
+export const PERCENT_ONLY = 'percent-only';
+
+// §3.3: stale/unavailable render at 55% opacity.
+const DIM_OPACITY = 0.55;
+
+function windowName(constraint) {
+    if (constraint.kind === 'session')
+        return 'session';
+    if (constraint.kind === 'week')
+        return 'weekly';
+    return `weekly ${constraint.model}`;
+}
+
+// ", resets in 2 h 15 m (17:00)" / ", resets Tue, Jul 28" — the §4.3 reset
+// row recast as an accessible-name clause; empty when the constraint
+// carries no reset time.
+function resetClause(constraint, now, clock24) {
+    if (constraint.resetsAt == null)
+        return '';
+    const row = formatResetRow(constraint.resetsAt, now, {clock24});
+    return `, ${row.charAt(0).toLowerCase()}${row.slice(1)}`;
+}
+
+export function indicatorModel(snapshot, now, opts = {}) {
+    const {
+        displayMode = ICON_AND_PERCENT,
+        clock24 = true,
+        warningAt = 80,
+    } = opts;
+    const state = classify(snapshot, now, opts);
+
+    if (state === UNAVAILABLE) {
+        return {
+            labelText: null,
+            styleClass: 'claudometer-unavailable',
+            opacity: DIM_OPACITY,
+            // §3.3 honesty rule: no number anywhere — not in the label,
+            // not in the accessible name.
+            accessibleName: 'Claude usage data unavailable',
+            // Never hidden, even in percent-only mode: with no number to
+            // show, the slashed meter is all that marks the state.
+            iconVariant: 'meter-unavailable',
+        };
+    }
+
+    const constraint = constraintOf(snapshot);
+    const name = windowName(constraint);
+    let labelText, iconVariant, accessibleName;
+
+    if (state === LIMIT_HIT) {
+        // §3.3: at 100% the label swaps meaning from "how much used" to
+        // "when am I back"; the hourglass signals the swap. A real
+        // countdown overrides icon-only mode (UX-Q3 lean) — without a
+        // reset time there is no countdown, so no override, and the
+        // honest fallback label is the (true) 100%.
+        const countdown = constraint.resetsAt == null
+            ? null
+            : formatCountdown(constraint.resetsAt - now);
+        iconVariant = 'hourglass';
+        accessibleName = `Claude usage: ${name} limit reached` +
+            resetClause(constraint, now, clock24);
+        if (countdown !== null)
+            labelText = countdown;
+        else
+            labelText = displayMode === ICON_ONLY ? null : formatPercent(100);
+    } else {
+        // §3.3: warning/critical earn the `!` overlay; stale keeps the
+        // *current* meter (overlay included) and signals staleness by
+        // dimming, not by stripping state.
+        iconVariant = constraint.percent >= warningAt ? 'meter-alert' : 'meter';
+        labelText = displayMode === ICON_ONLY
+            ? null
+            : formatPercent(constraint.percent);
+        accessibleName =
+            `Claude usage: ${Math.round(constraint.percent)} percent ` +
+            `of ${name} limit used`;
+        if (state === STALE) {
+            // §8 stale qualifier; the reset clause is dropped — a stale
+            // reset time may already have passed.
+            accessibleName += `, data is ${formatAge(now - snapshot.fetchedAt)} old`;
+        } else {
+            accessibleName += resetClause(constraint, now, clock24);
+        }
+    }
+
+    return {
+        labelText,
+        styleClass: `claudometer-${state}`,
+        opacity: state === STALE ? DIM_OPACITY : 1,
+        accessibleName,
+        iconVariant: displayMode === PERCENT_ONLY ? null : iconVariant,
+    };
+}

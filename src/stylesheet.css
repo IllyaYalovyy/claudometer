@@ -1,3 +1,16 @@
-/* Claudometer stylesheet scaffold. Intentionally empty: the indicator
- * inherits panel styling; custom classes arrive with the UI tasks
- * (see designs/UX-DESIGN.md). */
+/* Panel indicator state classes (designs/UX-DESIGN.md §3.3), applied by
+ * src/indicator.js from the render model. Colors prefer theme-provided
+ * variables (Shell 47+ St supports var()) and fall back to the design's
+ * sufficient-contrast constants. Normal/stale/unavailable inherit the
+ * panel foreground; the stale/unavailable 55% dimming is actor opacity,
+ * set by the widget. No fonts or sizes here — the label must follow the
+ * panel font (§8). */
+
+.claudometer-warning {
+    color: var(--warning-color, #f5c211);
+}
+
+.claudometer-critical,
+.claudometer-limit-hit {
+    color: var(--error-color, #c01c28);
+}
