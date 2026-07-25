@@ -103,7 +103,13 @@ run_python_checks() {
 
     if python3 -m pytest --version >/dev/null 2>&1; then
         log "Python tests"
-        python3 -m pytest
+        local status=0
+        python3 -m pytest || status=$?
+        # Exit code 5 means "no tests collected" (e.g. tests/ holds only
+        # fixtures); that is not a failure.
+        if [[ ${status} -ne 0 && ${status} -ne 5 ]]; then
+            return "${status}"
+        fi
     else
         log "Skipping Python tests: pytest not found"
     fi

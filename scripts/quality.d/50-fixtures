@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Guard the committed RFC-001 evidence fixtures: they must stay valid JSON
+# and keep the invariants the RFC's decision rests on. See
+# tests/fixtures/README.md.
+set -euo pipefail
+
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "${repo_root}"
+
+python3 - <<'PY'
+import json
+import sys
+from pathlib import Path
+
+failures = []
+
+def fail(msg):
+    failures.append(msg)
+
+fixtures_dir = Path("tests/fixtures")
+
+# Every committed fixture must be valid JSON.
+for path in sorted(fixtures_dir.glob("*.json")):
+    try:
+        json.loads(path.read_text())
+    except json.JSONDecodeError as e:
+        fail(f"{path}: not valid JSON: {e}")
+
+# CLI envelope fixture: the G1 zero-token-cost evidence (RFC-001 Q1).
+cli_path = fixtures_dir / "claude-p-usage-result.json"
+try:
+    cli = json.loads(cli_path.read_text())
+except (OSError, json.JSONDecodeError):
+    cli = None
+    fail(f"{cli_path}: missing or unreadable")
+if cli is not None:
+    for key, expected in [
+        ("num_turns", 0),
+        ("duration_api_ms", 0),
+        ("total_cost_usd", 0),
+        ("modelUsage", {}),
+        ("is_error", False),
+    ]:
+        if cli.get(key) != expected:
+            fail(f"{cli_path}: expected {key} == {expected!r}, got {cli.get(key)!r}")
+    usage = cli.get("usage", {})
+    for key in ("input_tokens", "output_tokens",
+                "cache_creation_input_tokens", "cache_read_input_tokens"):
+        if usage.get(key) != 0:
+            fail(f"{cli_path}: expected usage.{key} == 0, got {usage.get(key)!r}")
+
+# Cache fixture: the structured window data the UI contract needs (RFC-001 Q2).
+cache_path = fixtures_dir / "cached-usage-utilization.json"
+try:
+    cache = json.loads(cache_path.read_text())
+except (OSError, json.JSONDecodeError):
+    cache = None
+    fail(f"{cache_path}: missing or unreadable")
+if cache is not None:
+    if not isinstance(cache.get("fetchedAtMs"), int):
+        fail(f"{cache_path}: fetchedAtMs missing or not an integer")
+    limits = cache.get("utilization", {}).get("limits")
+    if not isinstance(limits, list) or not limits:
+        fail(f"{cache_path}: utilization.limits missing or empty")
+    else:
+        for i, limit in enumerate(limits):
+            for key, types in [("kind", str), ("percent", (int, float)),
+                               ("resets_at", str)]:
+                if not isinstance(limit.get(key), types):
+                    fail(f"{cache_path}: limits[{i}].{key} missing or wrong type")
+
+# Sanitization: no real UUIDs may remain anywhere in committed fixtures.
+import re
+zero_uuid = "00000000-0000-0000-0000-000000000000"
+uuid_re = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+for path in sorted(fixtures_dir.glob("*.json")):
+    for found in uuid_re.findall(path.read_text()):
+        if found != zero_uuid:
+            fail(f"{path}: unsanitized UUID {found}")
+
+if failures:
+    for msg in failures:
+        print(f"FAIL: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+print("fixtures: OK")
+PY
