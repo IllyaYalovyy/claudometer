@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Extension scaffold checks: metadata.json validity, JS syntax, unit tests.
+set -euo pipefail
+
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "${repo_root}"
+
+echo "extension: validating src/metadata.json"
+python3 - <<'PY'
+import json
+import sys
+
+try:
+    with open("src/metadata.json") as f:
+        meta = json.load(f)
+except (OSError, json.JSONDecodeError) as e:
+    sys.exit(f"FAIL: src/metadata.json: {e}")
+
+required = ["uuid", "name", "description", "shell-version", "url",
+            "settings-schema"]
+missing = [key for key in required if key not in meta]
+if missing:
+    sys.exit(f"FAIL: src/metadata.json: missing required keys: {missing}")
+
+versions = meta["shell-version"]
+if (not isinstance(versions, list) or not versions
+        or not all(isinstance(v, str) for v in versions)):
+    sys.exit("FAIL: src/metadata.json: shell-version must be a non-empty "
+             "list of strings")
+
+print("metadata.json: OK")
+PY
+
+# gjs is this project's runtime; a machine without it cannot vouch for the
+# extension code, so fail loudly instead of skipping.
+if ! command -v gjs >/dev/null 2>&1; then
+    echo "FAIL: gjs not found; cannot syntax-check or test extension JS" >&2
+    exit 1
+fi
+
+# Only src/: importing a test file would execute it; test-file syntax
+# errors already fail tests/run-tests.sh below.
+echo "extension: syntax-checking src JS"
+mapfile -t js_files < <(find src -name '*.js' -type f | sort)
+if [[ ${#js_files[@]} -eq 0 ]]; then
+    echo "FAIL: no JS files found under src/" >&2
+    exit 1
+fi
+gjs -m scripts/check-js-syntax.js "${js_files[@]}"
+echo "syntax: OK (${#js_files[@]} files)"
+
+echo "extension: running unit tests"
+tests/run-tests.sh

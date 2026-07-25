@@ -120,11 +120,15 @@ run_project_hooks() {
         return
     fi
 
+    # [[ -x ]] rather than find -perm -111: the latter needs execute for
+    # user AND group AND other, so a umask like 027 makes hooks silently
+    # skip.
     local hook
     while IFS= read -r hook; do
+        [[ -x ${hook} ]] || continue
         log "Project quality hook: ${hook}"
         "${hook}"
-    done < <(find scripts/quality.d -maxdepth 1 -type f -perm -111 | sort)
+    done < <(find scripts/quality.d -maxdepth 1 -type f | sort)
 }
 
 run_shell_syntax_checks
