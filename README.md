@@ -49,6 +49,7 @@ The default workflow is intentionally simple:
 ├── designs/
 │   ├── RFC-000-template.md      # Design proposal template
 │   ├── RFC-001-usage-data-source.md  # Draft: how to read usage without tokens
+│   ├── UX-DESIGN.md             # Panel indicator + dropdown UX design
 │   └── USER-TASKS.md            # User workflow inventory
 ├── docs/
 │   ├── PROCESS.md               # How work moves from idea to merge

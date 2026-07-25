@@ -27,8 +27,11 @@ that data comes from and how it is fetched.
 
 - **NG1** - Historical analytics/dashboards beyond what the panel dropdown
   needs.
-- **NG2** - Supporting usage reporting for API-key-only setups that never run
-  the `claude` CLI locally (revisit only if a real user asks).
+- **NG2** - API-key (pay-per-token) usage reporting. **Ratified by user
+  decision 2026-07-24: Claudometer targets subscription plans and their
+  rate-limit windows only.** API metering is a different product; an
+  API-key-only setup renders as the unavailable state (see
+  `UX-DESIGN.md` Scope note).
 
 ## Background and Motivation
 

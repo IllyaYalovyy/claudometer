@@ -118,5 +118,7 @@ committing, and do not mix unrelated refactors with behavior changes.
 
 ## Push Policy
 
-Do not push to a remote unless explicitly instructed or unless this project has
-adopted a different team policy.
+Adopted 2026-07-24: completed, verified work is always committed and pushed
+to `origin/main`. Do not leave finished work sitting uncommitted or
+unpushed. The quality gate and the staging checklist in `docs/COMMITS.md`
+still apply before every commit — "always push" is not "push broken work."

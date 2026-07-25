@@ -44,12 +44,16 @@ tokens, rolling-window usage, plan limits, reset times).
   glanceable summary, not a full accounting UI.
 - Not a cloud dashboard — no server component, no account system, no data
   leaves the machine.
+- Not an API-key cost meter — Claudometer is for subscription plans and
+  their rate-limit windows (session/weekly percentages, reset times).
+  Pay-per-token API metering is a different problem with different data and
+  a different UI, and is permanently out of scope.
 
 ## Target Users
 
-Developers who run Claude Code regularly across multiple terminals or
-projects and want to see how close they are to a rate-limit window without
-interrupting a session to check.
+Developers on a Claude subscription plan who run Claude Code regularly
+across multiple terminals or projects and want to see how close they are to
+a rate-limit window without interrupting a session to check.
 
 ## Success Criteria
 
