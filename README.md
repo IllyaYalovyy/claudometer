@@ -101,6 +101,16 @@ Reusable prompts live in `docs/prompts/`:
 - `review.md` - review a diff or branch
 - `commit.md` - prepare a clean commit
 
+## Task Tracking
+
+Work toward the MVP is tracked as GitHub issues under the
+[MVP milestone](https://github.com/IllyaYalovyy/claudometer/milestone/1),
+ordered by dependency (#1 resolves RFC-001 first; #14 is the final smoke +
+accessibility gate). Each issue is a self-contained specification with
+acceptance criteria and test requirements; the issue body is the source of
+truth for its task, and completed tasks are closed with a completion report
+comment.
+
 ## AI Task Runner (local only)
 
 This project uses `ktask`, a local project-agnostic AI CLI task orchestrator,
