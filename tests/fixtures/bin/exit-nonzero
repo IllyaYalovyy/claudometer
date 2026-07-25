@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake `claude` for fetcher tests: fails outright, like a crashed CLI.
+echo 'simulated CLI failure' >&2
+exit 3

@@ -21,7 +21,18 @@ fi
 status=0
 for test_file in "${test_files[@]}"; do
     echo "==> ${test_file}"
-    gjs -m "${test_file}" || status=1
+    file_status=0
+    output=$(gjs -m "${test_file}" 2>&1) || file_status=1
+    printf '%s\n' "${output}"
+    # gjs only warns about promise rejections nothing awaited; async code
+    # that leaks one is broken even if every assertion passed.
+    if grep -qi 'unhandled promise rejection' <<<"${output}"; then
+        echo "FAIL: ${test_file}: unhandled promise rejection" >&2
+        file_status=1
+    fi
+    if [[ ${file_status} -ne 0 ]]; then
+        status=1
+    fi
 done
 
 if [[ ${status} -ne 0 ]]; then

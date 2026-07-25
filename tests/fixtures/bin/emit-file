@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fake `claude` for fetcher tests: prints the given file as its stdout,
+# standing in for `claude -p "/usage" --output-format json` emitting a
+# captured envelope. See tests/fixtures/README.md.
+exec cat "$1"

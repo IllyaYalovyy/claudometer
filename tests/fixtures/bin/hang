@@ -1,0 +1,6 @@
+#!/bin/sh
+# Fake `claude` for fetcher tests: records its own PID to the given path,
+# then hangs forever with stdout open — the refresh-timeout scenario. The
+# exec keeps the PID identical so the test can prove the kill.
+echo "$$" > "$1"
+exec sleep 600

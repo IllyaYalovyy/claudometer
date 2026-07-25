@@ -56,3 +56,29 @@ cache above is the parse surface.
 
 `scripts/quality.d/50-fixtures` re-asserts these invariants on every
 quality-gate run so the committed evidence cannot silently rot.
+
+### `claude-p-usage-signed-out.json`
+
+Full stdout of the same command run **signed out**, captured 2026-07-25 on
+CLI **2.1.220** with `CLAUDE_CONFIG_DIR` pointed at an empty temporary
+directory (so no credentials exist and no billed call is possible):
+
+```bash
+CLAUDE_CONFIG_DIR=$(mktemp -d) claude -p "/usage" --output-format json
+```
+
+Findings that shaped the fetcher (`src/lib/fetcher.js`): the signed-out CLI
+exits **0** with `is_error: false` and an all-zero envelope — there is no
+distinguishable auth-error envelope shape on this CLI version — and it does
+**not** create `cachedUsageUtilization`. The `result` field is a generic
+cost report instead of the usage report. `NOT_AUTHENTICATED` is therefore
+detected on the file surface (cache key absent, RFC-001 taxonomy), never
+from CLI output.
+
+## Fake executables (`bin/`)
+
+Shell scripts standing in for the `claude` binary in fetcher unit tests
+(the refresh argv is injectable, RFC-001 Design). Each simulates one
+failure mode: `emit-file` prints a captured envelope, `emit-garbage` prints
+non-JSON, `exit-nonzero` fails outright, `hang` records its PID and sleeps
+so the timeout kill can be proven. They are test doubles, not captures.
