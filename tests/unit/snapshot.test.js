@@ -172,10 +172,22 @@ test('prose_or_malformed_reset_times_are_unparseable', () => {
         '2026-07-25T10:39:59',
         '2026-13-45T99:99:99.000Z',
         123,
-        null,
-        undefined,
     ];
     for (const resetsAt of cases) {
+        const snap = parseSnapshot(mutated(p => {
+            limitOfKind(p, 'session').resets_at = resetsAt;
+        }), NOW);
+        assertErrorOnly(snap, UNPARSEABLE, `resets_at ${String(resetsAt)}`);
+    }
+});
+
+test('null_or_absent_reset_time_yields_a_window_without_resetsAt', () => {
+    // Observed live 2026-07-25 (post-RFC-001 capture): the CLI writes
+    // `resets_at: null` for a window with no scheduled reset (an inactive
+    // session at 0%). A missing instant is absent data, not schema drift —
+    // UX §2 marks resetsAt optional, and rejecting the whole snapshot
+    // would hide the other windows' honest percents.
+    for (const resetsAt of [null, undefined]) {
         const snap = parseSnapshot(mutated(p => {
             const session = limitOfKind(p, 'session');
             if (resetsAt === undefined)
@@ -183,7 +195,12 @@ test('prose_or_malformed_reset_times_are_unparseable', () => {
             else
                 session.resets_at = resetsAt;
         }), NOW);
-        assertErrorOnly(snap, UNPARSEABLE, `resets_at ${String(resetsAt)}`);
+        const label = String(resetsAt);
+        assertEquals('error' in snap, false, `${label}: no error`);
+        assertEquals(snap.session.percent, 27, `${label}: percent kept`);
+        assertEquals('resetsAt' in snap.session, false,
+            `${label}: no fabricated resetsAt`);
+        assertEquals(snap.week.percent, 34, `${label}: other windows kept`);
     }
 });
 

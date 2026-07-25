@@ -15,3 +15,20 @@
 .claudometer-limit-hit {
     color: #c01c28;
 }
+
+/* Dropdown (§4.2 bars, §4.4 footer): bar geometry lives in the widget
+ * (src/menu.js); only the per-window state colors and the stale freshness
+ * line live here, same constants and St-var() caveat as above. A bar in
+ * its normal state has no rule — it inherits the menu foreground. */
+
+.claudometer-bar-warning {
+    color: #f5c211;
+}
+
+.claudometer-bar-critical {
+    color: #c01c28;
+}
+
+.claudometer-footer-stale {
+    color: #f5c211;
+}

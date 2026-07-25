@@ -30,8 +30,11 @@ export const UNPARSEABLE = 'unparseable';
 const WINDOW_KINDS = new Set(['session', 'weekly_all', 'weekly_scoped']);
 
 // Strict ISO 8601 with an explicit offset — the only reset-time format the
-// cache has ever carried. Anything else (notably the CLI's human prose
-// dates) is drift, not something to hand to a lenient Date.parse.
+// cache has ever carried. Anything else present (notably the CLI's human
+// prose dates) is drift, not something to hand to a lenient Date.parse.
+// null/absent is not drift: observed live 2026-07-25, the CLI writes
+// `resets_at: null` for a window with no scheduled reset (inactive
+// session at 0%), and UX §2 marks resetsAt optional.
 const RESETS_AT_RE =
     /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -101,18 +104,22 @@ export function parseSnapshot(raw, now) {
         if (!WINDOW_KINDS.has(limit.kind))
             continue;
         const percent = parsePercent(limit.percent);
-        const resetsAt = parseResetsAt(limit.resets_at);
-        if (percent === null || resetsAt === null)
+        if (percent === null)
             return unparseable;
+        const hasReset = limit.resets_at != null;
+        const resetsAt = hasReset ? parseResetsAt(limit.resets_at) : null;
+        if (hasReset && resetsAt === null)
+            return unparseable;
+        const window = hasReset ? {percent, resetsAt} : {percent};
         if (limit.kind === 'session') {
-            snapshot.session ??= {percent, resetsAt};
+            snapshot.session ??= window;
         } else if (limit.kind === 'weekly_all') {
-            snapshot.week ??= {percent, resetsAt};
+            snapshot.week ??= window;
         } else {
             const model = limit.scope?.model?.display_name;
             if (typeof model !== 'string' || model === '')
                 return unparseable;
-            weekModel.push({model, percent, resetsAt});
+            weekModel.push({model, ...window});
         }
     }
     if (weekModel.length > 0)
