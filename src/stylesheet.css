@@ -1,16 +1,17 @@
 /* Panel indicator state classes (designs/UX-DESIGN.md §3.3), applied by
- * src/indicator.js from the render model. Colors prefer theme-provided
- * variables (Shell 47+ St supports var()) and fall back to the design's
- * sufficient-contrast constants. Normal/stale/unavailable inherit the
- * panel foreground; the stale/unavailable 55% dimming is actor opacity,
- * set by the widget. No fonts or sizes here — the label must follow the
- * panel font (§8). */
+ * src/indicator.js from the render model. Colors are the design's
+ * sufficient-contrast constants: `var(--warning-color, ...)` forms were
+ * verified in a nested Shell 49.8 to be dropped entirely by St (theme
+ * node stays at the panel foreground), so they cannot be preferred here.
+ * Normal/stale/unavailable inherit the panel foreground; the
+ * stale/unavailable 55% dimming is actor opacity, set by the widget. No
+ * fonts or sizes here — the label must follow the panel font (§8). */
 
 .claudometer-warning {
-    color: var(--warning-color, #f5c211);
+    color: #f5c211;
 }
 
 .claudometer-critical,
 .claudometer-limit-hit {
-    color: var(--error-color, #c01c28);
+    color: #c01c28;
 }

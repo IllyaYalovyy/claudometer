@@ -12,6 +12,9 @@
 //   iconVariant    semantic icon token, or null to hide the icon:
 //                  'meter' | 'meter-alert' (the §3.3 `!` overlay) |
 //                  'hourglass' | 'meter-unavailable' (outline + slash)
+//   iconPercent    fill percent for the meter variants' clockwise gauge
+//                  (§3.1); null for hourglass/unavailable, which draw no
+//                  fill — never a fabricated number (§1)
 
 import {classify, constraintOf, LIMIT_HIT, STALE, UNAVAILABLE} from './derive.js';
 import {
@@ -66,12 +69,13 @@ export function indicatorModel(snapshot, now, opts = {}) {
             // Never hidden, even in percent-only mode: with no number to
             // show, the slashed meter is all that marks the state.
             iconVariant: 'meter-unavailable',
+            iconPercent: null,
         };
     }
 
     const constraint = constraintOf(snapshot);
     const name = windowName(constraint);
-    let labelText, iconVariant, accessibleName;
+    let labelText, iconVariant, iconPercent, accessibleName;
 
     if (state === LIMIT_HIT) {
         // §3.3: at 100% the label swaps meaning from "how much used" to
@@ -83,6 +87,7 @@ export function indicatorModel(snapshot, now, opts = {}) {
             ? null
             : formatCountdown(constraint.resetsAt - now);
         iconVariant = 'hourglass';
+        iconPercent = null;
         accessibleName = `Claude usage: ${name} limit reached` +
             resetClause(constraint, now, clock24);
         if (countdown !== null)
@@ -94,6 +99,7 @@ export function indicatorModel(snapshot, now, opts = {}) {
         // *current* meter (overlay included) and signals staleness by
         // dimming, not by stripping state.
         iconVariant = constraint.percent >= warningAt ? 'meter-alert' : 'meter';
+        iconPercent = constraint.percent;
         labelText = displayMode === ICON_ONLY
             ? null
             : formatPercent(constraint.percent);
@@ -115,5 +121,6 @@ export function indicatorModel(snapshot, now, opts = {}) {
         opacity: state === STALE ? DIM_OPACITY : 1,
         accessibleName,
         iconVariant: displayMode === PERCENT_ONLY ? null : iconVariant,
+        iconPercent,
     };
 }

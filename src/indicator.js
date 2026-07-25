@@ -9,16 +9,8 @@ import St from 'gi://St';
 
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
+import {GaugeIcon} from './gauge.js';
 import {indicatorModel} from './lib/indicator_model.js';
-
-// Stand-in symbolic icons until the custom gauge icon task lands
-// (§3.1 — a separate task draws claudometer-symbolic.svg and friends).
-const VARIANT_ICONS = {
-    'meter': 'utilities-system-monitor-symbolic',
-    'meter-alert': 'dialog-warning-symbolic',
-    'hourglass': 'alarm-symbolic',
-    'meter-unavailable': 'action-unavailable-symbolic',
-};
 
 export const ClaudometerIndicator = GObject.registerClass(
 class ClaudometerIndicator extends PanelMenu.Button {
@@ -29,7 +21,7 @@ class ClaudometerIndicator extends PanelMenu.Button {
         const box = new St.BoxLayout({
             style_class: 'panel-status-indicators-box',
         });
-        this._icon = new St.Icon({style_class: 'system-status-icon'});
+        this._icon = new GaugeIcon();
         this._label = new St.Label({y_align: Clutter.ActorAlign.CENTER});
         box.add_child(this._icon);
         box.add_child(this._label);
@@ -44,7 +36,7 @@ class ClaudometerIndicator extends PanelMenu.Button {
 
         this._icon.visible = model.iconVariant !== null;
         if (model.iconVariant !== null)
-            this._icon.icon_name = VARIANT_ICONS[model.iconVariant];
+            this._icon.update(model.iconVariant, model.iconPercent);
 
         this._label.visible = model.labelText !== null;
         this._label.text = model.labelText ?? '';

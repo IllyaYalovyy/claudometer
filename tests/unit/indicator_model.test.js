@@ -187,6 +187,30 @@ test('accessible_name_names_the_constraining_window', () => {
         'resets Tue, Jul 28');
 });
 
+test('meter_variants_carry_the_fill_percent_for_the_gauge', () => {
+    // The gauge widget draws the §3.1 clockwise fill from iconPercent;
+    // the label alone (absent in icon-only mode) cannot feed it.
+    const cases = [
+        ['normal', sessionAt(67), 67],
+        ['warning', sessionAt(84), 84],
+        ['critical', sessionAt(97), 97],
+        ['stale', sessionAt(67.4, NOW - 25 * MIN), 67.4],
+    ];
+    for (const [state, snapshot, percent] of cases) {
+        assertEquals(model(snapshot).iconPercent, percent,
+            `${state}: iconPercent`);
+        assertEquals(model(snapshot, {displayMode: ICON_ONLY}).iconPercent,
+            percent, `${state} icon-only: iconPercent`);
+    }
+});
+
+test('non_meter_variants_carry_no_fill_percent', () => {
+    // Hourglass and slashed-outline variants draw no fill; a percent here
+    // would tempt the widget into §1's honesty failure (fabricated fill).
+    assertEquals(model(sessionAt(100)).iconPercent, null, 'limit-hit');
+    assertEquals(model(null).iconPercent, null, 'unavailable');
+});
+
 test('accessible_name_honors_the_12_hour_clock_option', () => {
     const m = model(sessionAt(67), {clock24: false});
     assertEquals(m.accessibleName,
