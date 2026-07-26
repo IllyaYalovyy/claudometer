@@ -69,12 +69,20 @@ export function formatAge(ms) {
 
 // §4.4 footer: "Updated just now" under 30 s, then whole minutes rounded
 // to nearest; past staleAfterMs (same strict "older than" boundary as
-// derive.js's STALE) the line explains the dimmed icon instead.
+// derive.js's STALE) the line explains the dimmed icon instead. The
+// failure clause needs `lastRefreshFailed` — old data alone is not
+// evidence of a failed refresh (#16: a healthy CLI throttles rewrites of
+// its cache, so a working setup routinely ages past the threshold).
 export function formatFreshness(fetchedAt, now, opts = {}) {
-    const {staleAfterMs = DEFAULT_STALE_AFTER_MS} = opts;
+    const {
+        staleAfterMs = DEFAULT_STALE_AFTER_MS,
+        lastRefreshFailed = false,
+    } = opts;
     const age = now - fetchedAt;
-    if (age > staleAfterMs)
-        return `Data is ${formatAge(age)} old — last refresh failed`;
+    if (age > staleAfterMs) {
+        const aged = `Data is ${formatAge(age)} old`;
+        return lastRefreshFailed ? `${aged} — last refresh failed` : aged;
+    }
     if (age < 30000)
         return 'Updated just now';
     return `Updated ${Math.round(age / MINUTE_MS)} min ago`;

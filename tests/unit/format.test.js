@@ -101,17 +101,34 @@ test('freshness_reports_whole_minutes_from_30_seconds_up', () => {
         assertEquals(formatFreshness(now - age, now), expected, `${age} ms`);
 });
 
-test('freshness_past_the_stale_limit_states_age_and_failure', () => {
-    // §4.4: the stale footer explains the dimmed icon. Same strict "older
-    // than" boundary as derive.js's STALE.
+test('freshness_past_the_stale_limit_states_age_without_blaming', () => {
+    // §4.4/#16: the stale footer explains the dimmed icon with the honest
+    // age alone — a healthy CLI throttles cache rewrites, so old data is
+    // not evidence of a failed refresh. Same strict "older than" boundary
+    // as derive.js's STALE.
     const now = 1785000000000;
     const opts = {staleAfterMs: 180000};
     assertEquals(formatFreshness(now - 25 * MIN, now, opts),
-        'Data is 25 min old — last refresh failed');
+        'Data is 25 min old');
     assertEquals(formatFreshness(now - (HOUR + 5 * MIN), now, opts),
-        'Data is 1 h 5 min old — last refresh failed');
+        'Data is 1 h 5 min old');
     assertEquals(formatFreshness(now - 180000, now, opts),
         'Updated 3 min ago', 'exactly at the limit is not stale');
+});
+
+test('freshness_claims_failure_only_when_the_last_refresh_failed', () => {
+    // §4.4/#16: the "— last refresh failed" clause tracks the recorded
+    // spawn outcome, never the age alone.
+    const now = 1785000000000;
+    const failed = {staleAfterMs: 180000, lastRefreshFailed: true};
+    assertEquals(formatFreshness(now - 25 * MIN, now, failed),
+        'Data is 25 min old — last refresh failed');
+    assertEquals(formatFreshness(now - 25 * MIN, now,
+        {staleAfterMs: 180000, lastRefreshFailed: false}),
+        'Data is 25 min old');
+    assertEquals(formatFreshness(now - 2 * MIN, now, failed),
+        'Updated 2 min ago',
+        'a past failure adds nothing while the data is fresh');
 });
 
 test('last_tried_mirrors_the_freshness_cadence_without_claiming_data', () => {

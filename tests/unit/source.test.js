@@ -150,6 +150,31 @@ test('refresh_failure_journal_line_names_the_command_tried', async () => {
         `journal names the command tried, got: ${warnings[0]}`);
 });
 
+test('last_refresh_failed_tracks_the_latest_spawn_outcome', async () => {
+    // #16: the §4.4 footer may claim "last refresh failed" only when the
+    // last spawn actually failed — old data alone is not evidence (the
+    // CLI throttles cache rewrites). The source records the outcome.
+    const filePath = writeTmp('outcome-claude.json', cacheFileText());
+    const log = tmpPath('outcome-runs.log');
+    const config = {filePath, refreshArgv: [EXIT_NONZERO],
+        refreshTimeoutMs: 5000};
+    const source = new UsageSource({config, warn: () => {}});
+    assertEquals(source.lastRefreshFailed, false, 'no spawn yet');
+
+    const fresh = await source.fetch(FRESH_NOW);
+    assertEquals('error' in fresh, false, 'precondition: fresh cache');
+    assertEquals(source.lastRefreshFailed, false,
+        'a fetch without a spawn records nothing');
+
+    await source.fetch(STALE_NOW);
+    assertEquals(source.lastRefreshFailed, true, 'failed spawn recorded');
+
+    config.refreshArgv = [RECORD_REFRESH, log, ENVELOPE_FIXTURE];
+    await source.fetch(STALE_NOW + 60000);
+    assertEquals(source.lastRefreshFailed, false,
+        'a healthy spawn clears the failure even if the cache stays old');
+});
+
 test('missing_file_and_missing_binary_read_as_not_installed', async () => {
     const {source} = makeSource('nothing',
         {argv: ['/nonexistent/claudometer-no-such-binary']});
@@ -273,6 +298,8 @@ test('model_invoked_permanently_disables_the_refresh_path', async () => {
     const first = await source.fetch(STALE_NOW);
     assertEquals(spawnCount(log), 1);
     assertEquals(source.refreshDisabled, true, 'tripwire tripped');
+    assertEquals(source.lastRefreshFailed, true,
+        'the tripping spawn counts as a failed refresh (#16)');
     assertEquals(first.session.percent, 27, 'file data still served');
 
     const second = await source.fetch(STALE_NOW + 60000, {manual: true});

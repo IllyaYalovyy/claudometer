@@ -154,6 +154,8 @@ test('ut_003_walkthrough_not_installed_recover_limit_hit_go_stale', async () => 
 
     // 4. The refresh path breaks and the data ages out: the pipeline
     // degrades to the honest stale state, never to a silent wrong number.
+    // The footer opts carry the source's recorded spawn outcome, exactly
+    // as extension.js wires them (#16).
     config.refreshArgv = [EXIT_NONZERO];
     clock.value = T1 + 11 * MIN;
     delivered = nextSnapshot();
@@ -163,11 +165,31 @@ test('ut_003_walkthrough_not_installed_recover_limit_hit_go_stale', async () => 
     assertEquals(indicator.styleClass, 'claudometer-stale');
     assertEquals(indicator.opacity, 0.55);
     assertEquals(indicator.labelText, '100%', 'last value, dimmed');
-    menu = menuModel(snapshot, clock.value);
+    menu = menuModel(snapshot, clock.value,
+        {lastRefreshFailed: source.lastRefreshFailed});
     assertEquals(menu.footer.freshnessText,
         'Data is 11 min old — last refresh failed');
     assertEquals(menu.footer.stale, true);
     assertEquals(menu.promoted, null, 'stale drops the promotion');
+
+    // 5. The #16 scenario: the refresh path heals, but the CLI's
+    // cache-write throttle declines to rewrite the file yet. Spawns
+    // succeed, the data still ages — the footer states the honest age
+    // and stops claiming a failure that didn't happen.
+    config.refreshArgv = [RECORD_REFRESH, log, ENVELOPE_FIXTURE];
+    clock.value = T1 + 15 * MIN;
+    delivered = nextSnapshot();
+    timers.fireNext();
+    snapshot = await delivered;
+    indicator = indicatorModel(snapshot, clock.value);
+    assertEquals(indicator.styleClass, 'claudometer-stale',
+        'still stale: the cache stamp did not advance');
+    menu = menuModel(snapshot, clock.value,
+        {lastRefreshFailed: source.lastRefreshFailed});
+    assertEquals(menu.footer.freshnessText, 'Data is 15 min old',
+        'age only — the last refresh did not fail');
+    assertEquals(menu.footer.stale, true,
+        'the line still carries the stale warning color');
 
     scheduler.stop();
 });

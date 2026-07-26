@@ -167,7 +167,11 @@ no empty placeholders for windows the user's plan doesn't have.
 
 - Left: freshness — `Updated 2 min ago`, or `Updated just now` under 30s.
   In the stale state this line carries the warning color and the icon's
-  dimming is explained: `Data is 25 min old — last refresh failed`.
+  dimming is explained by the honest age: `Data is 25 min old`. The
+  `— last refresh failed` clause is appended only when the last refresh
+  spawn actually failed (#16): the CLI throttles rewrites of its cache,
+  so old data on a healthy setup must not be blamed on a failure that
+  didn't happen.
 - Right: a refresh button (`view-refresh-symbolic`). Manual refresh is the
   escape hatch for "I just ended a big session, what did it cost me?" The
   button shows a brief spinner during fetch; on failure the freshness line

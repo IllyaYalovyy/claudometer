@@ -147,7 +147,13 @@ export default class ClaudometerExtension extends Extension {
 
     _applySnapshot(snapshot) {
         const now = Date.now();
-        this._indicator.update(snapshot, now, this._opts);
-        this._menu.update(snapshot, now, this._opts);
+        // §4.4/#16: the footer's failure clause follows the source's real
+        // spawn outcome, not the data's age.
+        const opts = {
+            ...this._opts,
+            lastRefreshFailed: this._source.lastRefreshFailed,
+        };
+        this._indicator.update(snapshot, now, opts);
+        this._menu.update(snapshot, now, opts);
     }
 }

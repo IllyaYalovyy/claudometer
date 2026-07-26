@@ -27,7 +27,9 @@
 //                  renders nothing, never a fabricated countdown — §1)
 //   footer        the §4.4 row:
 //     freshnessText  'Updated 2 min ago' wording, stale wording past
-//                    staleAfterMs; 'Last tried 1 min ago' when the
+//                    staleAfterMs (the '— last refresh failed' clause
+//                    only when opts.lastRefreshFailed reports a real
+//                    spawn failure — #16); 'Last tried 1 min ago' when the
 //                    snapshot is unavailable (§4.5 — nothing was
 //                    updated); null before any fetch and in the
 //                    not-installed state (nothing honest to date-stamp,
@@ -125,6 +127,7 @@ export function menuModel(snapshot, now, opts = {}) {
         warningAt = 80,
         criticalAt = 95,
         staleAfterMs = DEFAULT_STALE_AFTER_MS,
+        lastRefreshFailed = false,
     } = opts;
     const optValues = {clock24, warningAt, criticalAt};
 
@@ -148,7 +151,8 @@ export function menuModel(snapshot, now, opts = {}) {
         footer = {freshnessText: formatLastTried(fetchedAt, now), stale: false};
     } else {
         footer = {
-            freshnessText: formatFreshness(fetchedAt, now, {staleAfterMs}),
+            freshnessText: formatFreshness(fetchedAt, now,
+                {staleAfterMs, lastRefreshFailed}),
             // Same strict boundary as derive.js's STALE and the
             // formatFreshness wording flip.
             stale: now - fetchedAt > staleAfterMs,

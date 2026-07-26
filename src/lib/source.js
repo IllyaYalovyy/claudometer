@@ -56,6 +56,16 @@ export class UsageSource {
         this._warn = warn;
         this._lastWarned = null;
         this._ineffectiveRefreshes = 0;
+        this._lastRefreshFailed = false;
+    }
+
+    // Whether the most recent refresh spawn failed (#16). The §4.4 stale
+    // footer may claim "last refresh failed" only on this evidence — old
+    // data alone is not it: the CLI throttles rewrites of its cache, so a
+    // healthy spawn routinely leaves the freshness stamp unchanged.
+    // Fetches that spawn nothing leave the last outcome standing.
+    get lastRefreshFailed() {
+        return this._lastRefreshFailed;
     }
 
     // Whether the G1 tripwire has fired and the CLI refresh path is off.
@@ -82,6 +92,7 @@ export class UsageSource {
             return snapshot;
 
         const result = await refreshCache(this._config);
+        this._lastRefreshFailed = !result.ok;
         if (result.ok)
             this._lastWarned = null;
         else

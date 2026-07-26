@@ -121,7 +121,10 @@ test('footer_freshness_covers_just_now_minutes_and_stale', () => {
         // [fetchedAt, opts, freshnessText, stale] — §4.4 wording.
         [NOW - 10000, {}, 'Updated just now', false],
         [NOW - 2 * MIN, {}, 'Updated 2 min ago', false],
-        [NOW - 25 * MIN, {},
+        // #16: stale age alone never claims a failure…
+        [NOW - 25 * MIN, {}, 'Data is 25 min old', true],
+        // …the clause needs the recorded spawn failure.
+        [NOW - 25 * MIN, {lastRefreshFailed: true},
             'Data is 25 min old — last refresh failed', true],
         // Configured staleAfterMs moves the boundary with it.
         [NOW - 25 * MIN, {staleAfterMs: 30 * MIN},
