@@ -19,6 +19,7 @@ import {
     fetchRaw,
     fetchSnapshot,
     refreshCache,
+    resolveCli,
     REFRESH_FAILED,
     MODEL_INVOKED,
 } from '../../src/lib/fetcher.js';
@@ -35,8 +36,13 @@ const HANG = 'tests/fixtures/bin/hang';
 const NOW = 1785000000000;
 const FIXTURE_FETCHED_AT = 1784959900803;
 
+// run-tests.sh runs from the repository root, so fixture paths can be made
+// absolute for fakes that run with an unknown working directory.
+const REPO_ROOT = GLib.get_current_dir();
+
 const tmpDir = GLib.Dir.make_tmp('claudometer-fetcher-XXXXXX');
 const tmpFiles = [];
+const tmpDirs = [];
 
 function readFixture(path) {
     const [, bytes] = GLib.file_get_contents(path);
@@ -50,6 +56,28 @@ function tmpPath(name) {
 function writeTmp(name, contents) {
     const path = tmpPath(name);
     GLib.file_set_contents(path, contents);
+    tmpFiles.push(path);
+    return path;
+}
+
+// Fake bin dirs for the CLI-resolution tests: every level is recorded so
+// cleanup can rmdir them innermost-first.
+function makeDir(...segments) {
+    let path = tmpDir;
+    for (const segment of segments) {
+        path = GLib.build_filenamev([path, segment]);
+        if (!GLib.file_test(path, GLib.FileTest.IS_DIR)) {
+            GLib.mkdir_with_parents(path, 0o755);
+            tmpDirs.push(path);
+        }
+    }
+    return path;
+}
+
+function installExecutable(dir, name, script = '#!/bin/sh\nexit 0\n') {
+    const path = GLib.build_filenamev([dir, name]);
+    GLib.file_set_contents(path, script);
+    GLib.chmod(path, 0o755);
     tmpFiles.push(path);
     return path;
 }
@@ -122,6 +150,99 @@ test('unreadable_cache_path_reads_as_unparseable_not_a_crash', async () => {
     // exists but cannot be understood — unparseable, cause to the journal.
     const snap = await fetchSnapshot({filePath: tmpDir}, NOW);
     assertErrorOnly(snap, UNPARSEABLE, 'directory path');
+});
+
+// #18: GNOME Shell's PATH is not a login shell's, so a bare `claude` is
+// resolved explicitly — PATH first, then the common user-install dirs —
+// against injectable inputs (fake bin dirs here; the Shell's real
+// environment in production).
+
+test('resolve_cli_prefers_the_first_path_hit_over_fallbacks', () => {
+    const first = makeDir('res-order', 'path-a');
+    const second = makeDir('res-order', 'path-b');
+    const home = makeDir('res-order', 'home');
+    const localBin = makeDir('res-order', 'home', '.local', 'bin');
+    const expected = installExecutable(first, 'claude');
+    installExecutable(second, 'claude');
+    installExecutable(localBin, 'claude');
+    assertEquals(resolveCli('claude', {pathEnv: `${first}:${second}`, home}),
+        expected, 'first PATH hit wins over later dirs and fallbacks');
+});
+
+test('resolve_cli_falls_back_to_local_bin_then_home_bin', () => {
+    const scrubbed = makeDir('res-fallback', 'empty-path');
+    const home = makeDir('res-fallback', 'home');
+    const localBin = makeDir('res-fallback', 'home', '.local', 'bin');
+    const homeBin = makeDir('res-fallback', 'home', 'bin');
+    const inLocalBin = installExecutable(localBin, 'claude');
+    const inHomeBin = installExecutable(homeBin, 'claude');
+    assertEquals(resolveCli('claude', {pathEnv: scrubbed, home}), inLocalBin,
+        'a claude only reachable via ~/.local/bin is found');
+    GLib.unlink(inLocalBin);
+    assertEquals(resolveCli('claude', {pathEnv: scrubbed, home}), inHomeBin,
+        '~/bin is the last fallback');
+});
+
+test('resolve_cli_skips_non_program_candidates_and_misses_to_null', () => {
+    // Neither a directory named `claude` nor a non-executable file may
+    // satisfy the lookup — and only when every candidate misses does the
+    // resolution report not-found (null).
+    const dirTrap = makeDir('res-miss', 'dir-trap');
+    makeDir('res-miss', 'dir-trap', 'claude');
+    const plainTrap = makeDir('res-miss', 'plain-trap');
+    const plain = GLib.build_filenamev([plainTrap, 'claude']);
+    GLib.file_set_contents(plain, 'not a program');
+    tmpFiles.push(plain);
+    const home = makeDir('res-miss', 'home');
+    const localBin = makeDir('res-miss', 'home', '.local', 'bin');
+    const real = installExecutable(localBin, 'claude');
+    const pathEnv = `${dirTrap}:${plainTrap}`;
+    assertEquals(resolveCli('claude', {pathEnv, home}), real,
+        'traps are skipped, the real fallback is found');
+    GLib.unlink(real);
+    assertEquals(resolveCli('claude', {pathEnv, home}), null,
+        'null only when every candidate misses');
+});
+
+test('refresh_finds_a_cli_reachable_only_via_local_bin', async () => {
+    // The #18 acceptance case: PATH scrubbed, the CLI only in ~/.local/bin
+    // of an injected fake home — the spawn must still find and run it.
+    // (A fake name so a resolution regression can never spawn any real
+    // `claude` from the test environment's PATH.)
+    const scrubbed = makeDir('res-spawn', 'empty-path');
+    const home = makeDir('res-spawn', 'home');
+    const localBin = makeDir('res-spawn', 'home', '.local', 'bin');
+    installExecutable(localBin, 'claudometer-fake-claude',
+        `#!/bin/sh\nexec cat "${REPO_ROOT}/${ENVELOPE_FIXTURE}"\n`);
+    const result = await refreshCache({
+        refreshArgv: ['claudometer-fake-claude'],
+        refreshTimeoutMs: 5000,
+        cliSearch: {pathEnv: scrubbed, home},
+    });
+    assertEquals(result.ok, true, 'the fallback-resolved CLI was spawned');
+});
+
+test('unresolvable_bare_cli_reads_as_not_installed', async () => {
+    const scrubbed = makeDir('res-none', 'empty-path');
+    const home = makeDir('res-none', 'home');
+    const result = await refreshCache({
+        refreshArgv: ['claudometer-fake-claude'],
+        refreshTimeoutMs: 5000,
+        cliSearch: {pathEnv: scrubbed, home},
+    });
+    assertEquals(result.ok, false);
+    assertEquals(result.error, NOT_INSTALLED,
+        'all candidates missing is the §4.5 not-found experience');
+    assertEquals(result.command, 'claudometer-fake-claude',
+        'the failure names what was searched for');
+});
+
+test('refresh_failures_name_the_spawned_command_for_the_journal', async () => {
+    const result = await refreshCache(
+        {refreshArgv: [EXIT_NONZERO], refreshTimeoutMs: 5000});
+    assertEquals(result.ok, false);
+    assertEquals(result.command, EXIT_NONZERO,
+        'the failure carries the path that was actually spawned');
 });
 
 test('refresh_reports_ok_for_a_healthy_zero_cost_envelope', async () => {
@@ -257,4 +378,6 @@ runTests();
 // failures intentionally leave the temp files behind for inspection.
 for (const path of tmpFiles)
     GLib.unlink(path);
+for (const path of tmpDirs.reverse())
+    GLib.rmdir(path);
 GLib.rmdir(tmpDir);

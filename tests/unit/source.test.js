@@ -131,6 +131,24 @@ test('refresh_failure_keeps_the_readable_file_data', async () => {
     assertEquals(snap.fetchedAt, FETCHED, 'stamp untouched by the failure');
 });
 
+test('refresh_failure_journal_line_names_the_command_tried', async () => {
+    // #18: a broken refresh path must be diagnosable from the journal —
+    // the warning has to say *which* resolved command failed, not only
+    // that something did. (gjs's console.warn is unpatchable, hence the
+    // injectable sink.)
+    const warnings = [];
+    const {source} = makeSource('journal-cmd', {
+        cache: cacheFileText(),
+        argv: [EXIT_NONZERO],
+        sourceOpts: {warn: message => warnings.push(message)},
+    });
+    const snap = await source.fetch(STALE_NOW);
+    assertEquals(snap.session.percent, 27, 'file data still served');
+    assertEquals(warnings.length, 1, 'exactly one warning for the failure');
+    assertEquals(warnings[0].includes(EXIT_NONZERO), true,
+        `journal names the command tried, got: ${warnings[0]}`);
+});
+
 test('missing_file_and_missing_binary_read_as_not_installed', async () => {
     const {source} = makeSource('nothing',
         {argv: ['/nonexistent/claudometer-no-such-binary']});

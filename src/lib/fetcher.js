@@ -20,14 +20,43 @@ export const MODEL_INVOKED = 'model-invoked';
 
 // The RFC-001 source: the cache file as parse surface, the proven
 // token-free CLI command as refresh trigger. Injectable so tests (and a
-// future preference) can substitute both. The timeout is far above the
-// observed 264–321 ms envelope runs but safely below the 60 s poll tick.
+// future preference) can substitute both; the bare `claude` is resolved
+// to an absolute path at spawn time (resolveCli). The timeout is far
+// above the observed 264–321 ms envelope runs but safely below the 60 s
+// poll tick.
 export function defaultConfig() {
     return {
         filePath: GLib.build_filenamev([GLib.get_home_dir(), '.claude.json']),
         refreshArgv: ['claude', '-p', '/usage', '--output-format', 'json'],
         refreshTimeoutMs: 30000,
     };
+}
+
+// GNOME Shell's PATH is a session manager's, not a login shell's, so a
+// user-level `claude` install (npm prefix, installer script) may be
+// invisible to a bare execvp lookup even though a terminal finds it. A
+// bare command is therefore resolved here: each PATH dir first, then the
+// common user-install dirs ~/.local/bin and ~/bin. A hit is an executable
+// regular file; empty PATH entries (cwd by tradition) are never resolved.
+// Inputs are injectable so tests can point it at fake bin dirs. Returns
+// the absolute path of the first hit, or null when every candidate
+// misses.
+export function resolveCli(name, {
+    pathEnv = GLib.getenv('PATH') ?? '',
+    home = GLib.get_home_dir(),
+} = {}) {
+    const dirs = [
+        ...pathEnv.split(':').filter(dir => dir !== ''),
+        GLib.build_filenamev([home, '.local', 'bin']),
+        GLib.build_filenamev([home, 'bin']),
+    ];
+    for (const dir of dirs) {
+        const candidate = GLib.build_filenamev([dir, name]);
+        if (GLib.file_test(candidate, GLib.FileTest.IS_EXECUTABLE) &&
+            GLib.file_test(candidate, GLib.FileTest.IS_REGULAR))
+            return candidate;
+    }
+    return null;
 }
 
 class FetchError extends Error {
@@ -121,25 +150,39 @@ function classifyEnvelope(stdoutText) {
 }
 
 // Spawn the refresh command asynchronously and resolve — never reject —
-// with {ok: true} or {ok: false, error, reason?}. The caller re-reads the
-// file afterwards; nothing from the spawn is parsed into usage data. A
-// hang is SIGKILLed at the timeout, and the promise resolves only after
-// communicate() finishes, so the child is reaped before anyone observes
-// the result (no leaked GSubprocess).
+// with {ok: true} or {ok: false, error, reason?, command}. A bare command
+// name is first resolved through resolveCli (config.cliSearch feeds it);
+// no hit anywhere is NOT_INSTALLED without spawning. Every failure names
+// the `command` it tried so the journal can say which path failed. The
+// caller re-reads the file afterwards; nothing from the spawn is parsed
+// into usage data. A hang is SIGKILLed at the timeout, and the promise
+// resolves only after communicate() finishes, so the child is reaped
+// before anyone observes the result (no leaked GSubprocess).
 export function refreshCache(config) {
-    const {refreshArgv, refreshTimeoutMs} = {...defaultConfig(), ...config};
+    const {refreshArgv, refreshTimeoutMs, cliSearch} =
+        {...defaultConfig(), ...config};
+    const argv = [...refreshArgv];
+    if (!argv[0].includes('/')) {
+        const resolved = resolveCli(argv[0], cliSearch);
+        if (resolved === null)
+            return Promise.resolve(
+                {ok: false, error: NOT_INSTALLED, command: argv[0]});
+        argv[0] = resolved;
+    }
+    const command = argv[0];
     return new Promise(resolve => {
         let proc;
         try {
-            proc = Gio.Subprocess.new(refreshArgv,
+            proc = Gio.Subprocess.new(argv,
                 Gio.SubprocessFlags.STDOUT_PIPE |
                 Gio.SubprocessFlags.STDERR_PIPE);
         } catch (e) {
             if (e instanceof GLib.Error &&
                 e.matches(GLib.SpawnError, GLib.SpawnError.NOENT))
-                resolve({ok: false, error: NOT_INSTALLED});
+                resolve({ok: false, error: NOT_INSTALLED, command});
             else
-                resolve({ok: false, error: REFRESH_FAILED, reason: 'spawn-failed'});
+                resolve({ok: false, error: REFRESH_FAILED,
+                    reason: 'spawn-failed', command});
             return;
         }
         let timedOut = false;
@@ -159,12 +202,17 @@ export function refreshCache(config) {
             } catch {
                 stdout = null;
             }
-            if (timedOut)
-                resolve({ok: false, error: REFRESH_FAILED, reason: 'timeout'});
-            else if (!source.get_if_exited() || source.get_exit_status() !== 0)
-                resolve({ok: false, error: REFRESH_FAILED, reason: 'nonzero-exit'});
-            else
-                resolve(classifyEnvelope(stdout ?? ''));
+            if (timedOut) {
+                resolve({ok: false, error: REFRESH_FAILED,
+                    reason: 'timeout', command});
+            } else if (!source.get_if_exited() ||
+                       source.get_exit_status() !== 0) {
+                resolve({ok: false, error: REFRESH_FAILED,
+                    reason: 'nonzero-exit', command});
+            } else {
+                const verdict = classifyEnvelope(stdout ?? '');
+                resolve(verdict.ok ? verdict : {...verdict, command});
+            }
         });
     });
 }

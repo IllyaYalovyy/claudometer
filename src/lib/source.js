@@ -29,14 +29,18 @@ export class UsageSource {
     // `config` is the fetcher config (filePath/refreshArgv/timeout), held
     // by reference and read per call, so a caller may swap the argv (a
     // future preference) without rebuilding the source.
+    // `warn` is the journal sink (gjs's console.warn is unpatchable, so
+    // tests inject their own to assert on the message).
     constructor({config = defaultConfig(),
         refreshAfterMs = DEFAULT_REFRESH_AFTER_MS,
         refreshDisabled = false,
-        onRefreshDisabled = null} = {}) {
+        onRefreshDisabled = null,
+        warn = message => console.warn(message)} = {}) {
         this._config = config;
         this._refreshAfterMs = refreshAfterMs;
         this._refreshDisabled = refreshDisabled;
         this._onRefreshDisabled = onRefreshDisabled;
+        this._warn = warn;
         this._lastWarned = null;
     }
 
@@ -85,7 +89,7 @@ export class UsageSource {
         if (result.error === MODEL_INVOKED) {
             this._refreshDisabled = true;
             this._onRefreshDisabled?.();
-            console.warn('Claudometer: refresh envelope could not prove ' +
+            this._warn('Claudometer: refresh envelope could not prove ' +
                 'zero model cost; permanently disabling the CLI refresh ' +
                 'path (RFC-001 G1 tripwire)');
             return;
@@ -94,7 +98,10 @@ export class UsageSource {
         if (key === this._lastWarned)
             return;
         this._lastWarned = key;
-        console.warn(`Claudometer: cache refresh failed: ${result.error}` +
-            `${result.reason ? ` (${result.reason})` : ''}`);
+        // Name the resolved command so a wrong or missing CLI path is
+        // diagnosable from the journal alone (#18).
+        this._warn(`Claudometer: cache refresh failed: ${result.error}` +
+            `${result.reason ? ` (${result.reason})` : ''}` +
+            `${result.command ? `; command: ${result.command}` : ''}`);
     }
 }
