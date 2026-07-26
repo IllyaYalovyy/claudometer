@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Review |
+| Status | Implemented |
 | Author(s) | Illya Yalovyy |
 | Supersedes | - |
 | Superseded by | - |
@@ -196,6 +196,13 @@ written. Only this one key is extracted; the rest of `~/.claude.json`
   English prose as a freshness patch — buys a few minutes at the cost of a
   second, drift-prone parser. Revisit if real use shows the throttle
   growing coarser.
+  *Observed in practice (issue #16, smoke pass 2026-07-26): under
+  continuous 30 s polling the CLI rewrote the cache roughly every ~5
+  minutes — within the bound above — so a fully healthy setup periodically
+  crossed the 3×-interval stale threshold. The age shown was honest, but
+  the footer's "last refresh failed" wording over-claimed failure when the
+  CLI had merely declined to rewrite; fixed by attributing failure only to
+  an actually failed spawn (commit `1ce5b08`).*
 
 ### Failure taxonomy
 
@@ -221,6 +228,12 @@ written. Only this one key is extracted; the rest of `~/.claude.json`
    flag; re-enabled only by explicit user action), surfaces the stale/
    unavailable state, and logs. Fail-closed on G1: degraded freshness is
    acceptable, spending tokens is not.
+   *Implementation deviation (recorded at ratification, 2026-07-26): the
+   MVP initially shipped the disable flag in-memory only — not the
+   "persisted flag" this text requires — tracked as issue #17 rather than
+   silently absorbed. Persistence landed in commit `7faa9e5` (a GSettings
+   key surviving Shell restarts; re-enable remains an explicit user
+   action), closing the deviation.*
 3. The committed evidence fixtures are re-validated by
    `scripts/quality.d/50-fixtures` on every quality-gate run, and the Q1
    probe must be re-run (and this RFC's evidence appended) when the
@@ -253,8 +266,13 @@ extension can only be tested against the local values it reads.
 - [x] **Step 2** - Answer Q2 — done 2026-07-24, evidence under Q2 below.
 - [x] **Step 3** - Choose an option based on Step 1/2 results and fill in
   Design, then move Status to `Review` — done 2026-07-24 (this revision).
-- [ ] **Step 4** - Implement the chosen data source behind a small interface
-  so the option can be swapped without touching UI code. *(prerequisite: Step 3, Accepted)*
+- [x] **Step 4** - Implement the chosen data source behind a small interface
+  so the option can be swapped without touching UI code. *(prerequisite:
+  Step 3, Accepted)* — done, commits `e4f966f..ec1bad7` (issues #3–#14).
+  Ordering deviation, recorded rather than hidden: implementation shipped
+  while Status was still `Review`; the user ratified the Decision as
+  implemented on 2026-07-26 (issue #21), moving Status `Review` →
+  `Implemented` directly.
 
 ## Open Questions
 
