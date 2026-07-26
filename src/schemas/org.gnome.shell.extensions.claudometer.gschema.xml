@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- UX-DESIGN.md §7 preferences. Per-key ranges live here; the
+     warning<critical cross-field rule and the discrete refresh-interval
+     set cannot be expressed in a schema and are enforced by
+     src/lib/settings_model.js on every read. -->
+<schemalist gettext-domain="claudometer">
+  <schema id="org.gnome.shell.extensions.claudometer"
+          path="/org/gnome/shell/extensions/claudometer/">
+    <key name="indicator-style" type="s">
+      <choices>
+        <choice value="icon-and-percent"/>
+        <choice value="icon-only"/>
+        <choice value="percent-only"/>
+      </choices>
+      <default>'icon-and-percent'</default>
+      <summary>Indicator style</summary>
+      <description>
+        What the panel indicator shows: the gauge icon with the headline
+        percentage, the icon alone, or the percentage alone.
+      </description>
+    </key>
+    <key name="headline-metric" type="s">
+      <choices>
+        <choice value="auto"/>
+        <choice value="session"/>
+        <choice value="week"/>
+      </choices>
+      <default>'auto'</default>
+      <summary>Headline metric</summary>
+      <description>
+        Which usage window the panel percentage reports: the most
+        constrained window (auto), the session window, or the weekly
+        window.
+      </description>
+    </key>
+    <key name="warning-percent" type="i">
+      <range min="50" max="95"/>
+      <default>80</default>
+      <summary>Warning threshold (percent)</summary>
+      <description>
+        Usage percentage at which the indicator enters the warning state.
+        Kept strictly below critical-percent.
+      </description>
+    </key>
+    <key name="critical-percent" type="i">
+      <range min="51" max="100"/>
+      <default>95</default>
+      <summary>Critical threshold (percent)</summary>
+      <description>
+        Usage percentage at which the indicator enters the critical state.
+        Kept strictly above warning-percent.
+      </description>
+    </key>
+    <key name="refresh-interval-seconds" type="i">
+      <range min="30" max="600"/>
+      <default>60</default>
+      <summary>Refresh interval (seconds)</summary>
+      <description>
+        Background poll cadence. The UI offers 30, 60, 120, 300, or 600
+        seconds; other stored values snap to the nearest choice.
+      </description>
+    </key>
+  </schema>
+</schemalist>

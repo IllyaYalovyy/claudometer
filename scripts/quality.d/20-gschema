@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# GSettings schema checks: the schema must compile cleanly (strict) and
+# its id must match metadata.json's settings-schema and its own filename —
+# a mismatch only surfaces at runtime as a prefs/extension crash.
+set -euo pipefail
+
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+cd "${repo_root}"
+
+# glib-compile-schemas ships with GLib; a machine without it cannot vouch
+# for the schema, so fail loudly instead of skipping.
+if ! command -v glib-compile-schemas >/dev/null 2>&1; then
+    echo "FAIL: glib-compile-schemas not found; cannot validate schema" >&2
+    exit 1
+fi
+
+echo "gschema: compiling src/schemas (strict, dry run)"
+glib-compile-schemas --strict --dry-run src/schemas
+
+echo "gschema: checking id against metadata.json and filename"
+python3 - <<'PY'
+import json
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+schema_dir = Path("src/schemas")
+xml_files = sorted(schema_dir.glob("*.gschema.xml"))
+if not xml_files:
+    sys.exit("FAIL: no *.gschema.xml under src/schemas/")
+
+expected_id = json.loads(Path("src/metadata.json").read_text())["settings-schema"]
+for path in xml_files:
+    ids = [s.get("id") for s in ET.parse(path).getroot().iter("schema")]
+    if expected_id not in ids:
+        sys.exit(f"FAIL: {path}: no schema id {expected_id!r} "
+                 f"(metadata.json settings-schema); found {ids}")
+    if path.name != f"{expected_id}.gschema.xml":
+        sys.exit(f"FAIL: {path}: filename does not match schema id "
+                 f"{expected_id!r}")
+
+print("gschema id: OK")
+PY
+
+echo "gschema: OK"

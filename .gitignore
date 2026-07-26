@@ -21,6 +21,7 @@
 .agent/
 
 # Build artifacts
+src/schemas/gschemas.compiled
 /target/
 /build/
 /dist/
