@@ -477,6 +477,66 @@ test('user_initiated_refreshes_are_flagged_manual_to_the_fetch', async () => {
     scheduler.stop();
 });
 
+test('manual_pending_spans_refresh_now_until_its_snapshot_lands', async () => {
+    // #20: the menu keys the refresh spinner on this — it must be true
+    // exactly while a user-initiated fetch is pending or running, and
+    // false for ticks/start fetches the user never asked for.
+    const {scheduler, setFetch} = makeScheduler();
+    let resolveFetch;
+    setFetch(() => new Promise(resolve => {
+        resolveFetch = resolve;
+    }));
+    scheduler.start();
+    assertEquals(scheduler.manualPending, false,
+        'the start fetch is not user-initiated');
+    resolveFetch(okSnapshot(T0));
+    await settle();
+
+    scheduler.refreshNow();
+    assertEquals(scheduler.manualPending, true,
+        'true while the manual fetch runs');
+    resolveFetch(okSnapshot(T0));
+    await settle();
+    assertEquals(scheduler.manualPending, false,
+        'cleared once the manual snapshot landed');
+    scheduler.stop();
+});
+
+test('manual_pending_survives_a_poll_snapshot_answering_first', async () => {
+    // #20: a manual refresh clicked during an in-flight poll queues behind
+    // it. The poll's completion must NOT read as the manual answer — the
+    // pending flag holds through the poll snapshot and clears only on the
+    // queued manual fetch's own snapshot.
+    const pendingAtSnapshot = [];
+    const {scheduler, setFetch} = makeScheduler({
+        onSnapshot: () => pendingAtSnapshot.push(scheduler.manualPending),
+    });
+    const resolvers = [];
+    setFetch(() => new Promise(resolve => resolvers.push(resolve)));
+    scheduler.start();
+    scheduler.refreshNow();
+    assertEquals(scheduler.manualPending, true, 'queued behind the poll');
+    resolvers[0](okSnapshot(T0));
+    await settle();
+    resolvers[1](okSnapshot(T0));
+    await settle();
+    assertEquals(JSON.stringify(pendingAtSnapshot),
+        JSON.stringify([true, false]),
+        'still pending at the poll snapshot, answered at the manual one');
+    scheduler.stop();
+});
+
+test('stop_clears_manual_pending', async () => {
+    const {scheduler, setFetch} = makeScheduler();
+    setFetch(() => new Promise(() => {}));
+    scheduler.start();
+    scheduler.refreshNow();
+    assertEquals(scheduler.manualPending, true);
+    scheduler.stop();
+    assertEquals(scheduler.manualPending, false,
+        'a stopped scheduler owes nobody an answer');
+});
+
 test('manual_flag_survives_the_inflight_requeue', async () => {
     // A manual refresh landing during an in-flight tick queues one more
     // fetch — that queued fetch must still carry the manual flag.

@@ -138,9 +138,11 @@ function noticeLabel(styleClass) {
 // Renders menu_model descriptors into `menu` (the indicator's PopupMenu)
 // and drives the scheduler: §5 menu-open implicit refresh, §4.4 manual
 // refresh with an in-button spinner. The caller feeds every scheduler
-// snapshot through update(); a completed fetch — success or failure —
-// lands as an update, which also answers any in-flight manual refresh
-// (§4.4: the footer updates in place, no toasts).
+// snapshot through update() (§4.4: the footer updates in place, no
+// toasts). The spinner is a view of scheduler.manualPending, re-read at
+// every point it could change — an update() carrying a poll snapshot or
+// a settings re-render is not the answer to the user's refresh, and must
+// not clear it early (#20).
 export class ClaudometerMenu {
     constructor(menu, scheduler) {
         this._menu = menu;
@@ -152,13 +154,13 @@ export class ClaudometerMenu {
         this._promotedLabel = null;
         this._noticeHeadline = null;
         this._noticeDetail = null;
-        this._refreshing = false;
         this._tickId = 0;
 
         this._openStateId = menu.connect('open-state-changed',
             (_menu, open) => {
                 if (open) {
                     this._scheduler.maybeRefresh(OPEN_REFRESH_MAX_AGE_MS);
+                    this._syncSpinner();
                     this._startTick();
                 } else {
                     this._stopTick();
@@ -193,7 +195,7 @@ export class ClaudometerMenu {
     update(snapshot, now, opts = {}) {
         this._snapshot = snapshot;
         this._opts = opts;
-        this._setRefreshing(false);
+        this._syncSpinner();
         this._render(menuModel(snapshot, now, opts));
     }
 
@@ -316,7 +318,7 @@ export class ClaudometerMenu {
         this._refreshButton.connect('clicked', () => this._onRefreshClicked());
         item.add_child(this._refreshButton);
         this._menu.addMenuItem(item);
-        this._setRefreshing(this._refreshing);
+        this._syncSpinner();
     }
 
     _updateFooter(footer) {
@@ -331,18 +333,18 @@ export class ClaudometerMenu {
     }
 
     _onRefreshClicked() {
-        if (this._refreshing)
+        if (this._scheduler.manualPending)
             return;
-        this._setRefreshing(true);
         this._scheduler.refreshNow();
+        this._syncSpinner();
     }
 
-    _setRefreshing(refreshing) {
-        this._refreshing = refreshing;
+    _syncSpinner() {
         if (this._refreshIcon === null)
             return;
-        this._refreshIcon.visible = !refreshing;
-        if (refreshing)
+        const pending = this._scheduler.manualPending;
+        this._refreshIcon.visible = !pending;
+        if (pending)
             this._refreshSpinner.play();
         else
             this._refreshSpinner.stop();

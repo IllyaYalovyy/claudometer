@@ -119,9 +119,19 @@ export class Scheduler {
         this._inFlight = false;
         this._refetchQueued = false;
         this._manualQueued = false;
+        this._manualInFlight = false;
         this._wakeIds = [];
         this._snapshot = null;
         this._fetchedAt = null;
+    }
+
+    // True from a user-initiated refresh (refreshNow/maybeRefresh) until
+    // the fetch answering it delivers its snapshot — spanning any
+    // in-flight poll fetch the manual request queued behind. The menu's
+    // refresh spinner is a view of this (§4.4): a poll snapshot or a
+    // settings re-render landing mid-request must not read as the answer.
+    get manualPending() {
+        return this._manualQueued || this._manualInFlight;
     }
 
     // Latest delivered snapshot and the driver-side completion time of the
@@ -157,6 +167,7 @@ export class Scheduler {
         this._wakeIds = [];
         this._refetchQueued = false;
         this._manualQueued = false;
+        this._manualInFlight = false;
     }
 
     // Live §7 interval change: no fetch, no backoff reset — the next tick
@@ -223,6 +234,7 @@ export class Scheduler {
         this._inFlight = true;
         const manual = this._manualQueued;
         this._manualQueued = false;
+        this._manualInFlight = manual;
         const startedAt = this._now();
         let snapshot;
         try {
@@ -235,6 +247,7 @@ export class Scheduler {
             snapshot = {fetchedAt: startedAt, error: UNPARSEABLE};
         }
         this._inFlight = false;
+        this._manualInFlight = false;
         if (!this._running)
             return; // stopped mid-flight: discard, schedule nothing
 

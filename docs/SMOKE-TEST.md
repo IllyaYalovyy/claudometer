@@ -85,9 +85,16 @@ tested so reruns test the same edge.
 11. **Manual refresh.** Activate the refresh button. Expect: spinner
     replaces the icon during the fetch, menu stays open, footer returns
     to `Updated just now`, keyboard focus is not lost.
+    - **Spinner honesty (#20).** With a slow refresh CLI (e.g.
+      `refreshArgv = ['/bin/sh', '-c', 'sleep 3']`), click refresh, then
+      change a display setting (e.g. `indicator-style`) while it spins:
+      the spinner must keep spinning until the manual fetch lands, and
+      only then hand back the icon. Likewise a background poll snapshot
+      landing mid-request must not stop it early.
 12. **Menu-open implicit refresh.** With a snapshot older than 15 s,
-    opening the menu triggers a fetch (footer resets); reopening within
-    15 s does not.
+    opening the menu triggers a fetch (footer resets) and the refresh
+    button spins until that fetch lands; reopening within 15 s does
+    neither.
 13. **Dismiss.** Esc and clicking outside both close the menu; the panel
     returns to the ambient indicator; the displayed state is unchanged by
     an open/close cycle (no background state change).
