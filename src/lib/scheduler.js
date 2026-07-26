@@ -44,6 +44,22 @@ export function nextState(state, event) {
     }
 }
 
+// Live cadence change (§7 refresh interval applied without disable/
+// enable): keep the failure count, recompute the delay for the new base.
+// The same floor rule as nextState applies — an active backoff rung is
+// never cut short, and the rung never dips below the new base.
+export function rebasedState(state, baseSec) {
+    if (state.failures === 0)
+        return {baseSec, failures: 0, delaySec: baseSec};
+    const rung = BACKOFF_LADDER_SEC[
+        Math.min(state.failures, BACKOFF_LADDER_SEC.length) - 1];
+    return {
+        baseSec,
+        failures: state.failures,
+        delaySec: Math.max(baseSec, rung),
+    };
+}
+
 // Menu-open policy (§6): refresh only when the last completed fetch is
 // strictly older than maxAgeMs (or never happened). `fetchedAt` here is
 // the driver's own completion time, not the payload's fetchedAtMs — the
@@ -143,6 +159,23 @@ export class Scheduler {
         this._manualQueued = false;
     }
 
+    // Live §7 interval change: no fetch, no backoff reset — the next tick
+    // simply honors the new cadence. A pending tick is rescheduled; an
+    // in-flight fetch is left alone (its completion schedules from the
+    // rebased state).
+    setBaseInterval(sec) {
+        if (sec === this._baseSec)
+            return;
+        this._baseSec = sec;
+        if (!this._running)
+            return;
+        this._state = rebasedState(this._state, sec);
+        if (this._timeoutId !== 0) {
+            this._cancelTimer();
+            this._scheduleTick();
+        }
+    }
+
     // Manual refresh (§6): fetch immediately and reset the backoff. The
     // flag is consumed by the next fetch to *start*, so a manual refresh
     // queued behind an in-flight tick still reaches the source as manual.
@@ -220,6 +253,10 @@ export class Scheduler {
             this._runFetch();
             return;
         }
+        this._scheduleTick();
+    }
+
+    _scheduleTick() {
         this._timeoutId = this._timers.addSeconds(this._state.delaySec, () => {
             this._timeoutId = 0;
             this._runFetch();

@@ -211,6 +211,46 @@ test('non_meter_variants_carry_no_fill_percent', () => {
     assertEquals(model(null).iconPercent, null, 'unavailable');
 });
 
+test('headline_metric_pins_the_panel_to_the_chosen_window', () => {
+    // §7 "Headline metric": the pin decides the percent, the state, and
+    // the window named to the screen reader. Values are the stored
+    // GSettings strings.
+    const snapshot = {
+        fetchedAt: NOW,
+        session: {percent: 40, resetsAt: RESET},
+        week: {percent: 90, resetsAt: RESET},
+    };
+    const auto = model(snapshot);
+    assertEquals(auto.labelText, '90%', 'auto: constraint headline');
+    assertEquals(auto.styleClass, 'claudometer-warning');
+
+    const session = model(snapshot, {headlineMetric: 'session'});
+    assertEquals(session.labelText, '40%');
+    assertEquals(session.iconPercent, 40);
+    assertEquals(session.iconVariant, 'meter',
+        'no alert overlay for the un-headlined weekly window');
+    assertEquals(session.styleClass, 'claudometer-normal');
+    assertEquals(session.accessibleName,
+        'Claude usage: 40 percent of session limit used, ' +
+        'resets in 1 h 12 m (17:00)');
+
+    const week = model(snapshot, {headlineMetric: 'week'});
+    assertEquals(week.labelText, '90%');
+    assertEquals(week.accessibleName,
+        'Claude usage: 90 percent of weekly limit used, ' +
+        'resets in 1 h 12 m (17:00)');
+});
+
+test('pinning_to_an_absent_window_falls_back_to_the_constraint', () => {
+    // The accessible name still names the window actually shown, so the
+    // fallback stays honest.
+    const m = model(sessionAt(67), {headlineMetric: 'week'});
+    assertEquals(m.labelText, '67%');
+    assertEquals(m.accessibleName,
+        'Claude usage: 67 percent of session limit used, ' +
+        'resets in 1 h 12 m (17:00)');
+});
+
 test('accessible_name_honors_the_12_hour_clock_option', () => {
     const m = model(sessionAt(67), {clock24: false});
     assertEquals(m.accessibleName,

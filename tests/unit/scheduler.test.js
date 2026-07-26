@@ -14,6 +14,7 @@ import {
     initialState,
     nextState,
     needsRefresh,
+    rebasedState,
     Scheduler,
 } from '../../src/lib/scheduler.js';
 
@@ -213,6 +214,29 @@ test('backoff_never_schedules_below_the_configured_interval', () => {
 
 test('unknown_event_is_an_explicit_error', () => {
     assertThrows(() => nextState(initialState(60), 'tick'));
+});
+
+test('rebase_moves_a_healthy_cadence_to_the_new_interval', () => {
+    // §7 interval preference applied live: no failures means the next
+    // delay is simply the new base.
+    const state = rebasedState(initialState(60), 300);
+    assertEquals(state.baseSec, 300);
+    assertEquals(state.delaySec, 300);
+    assertEquals(state.failures, 0);
+});
+
+test('rebase_keeps_the_backoff_rung_and_respects_the_new_floor', () => {
+    let state = initialState(60);
+    state = nextState(state, 'failure');
+    state = nextState(state, 'failure');
+    assertEquals(state.delaySec, 120, 'precondition: on the 2-min rung');
+    const faster = rebasedState(state, 30);
+    assertEquals(faster.delaySec, 120,
+        'a shorter base does not cut an active backoff short');
+    assertEquals(faster.failures, 2, 'failure count survives the rebase');
+    const slower = rebasedState(state, 600);
+    assertEquals(slower.delaySec, 600,
+        'backoff never schedules below the new base');
 });
 
 test('needs_refresh_only_past_max_age', () => {
@@ -467,6 +491,70 @@ test('manual_flag_survives_the_inflight_requeue', async () => {
     await settle();
     assertEquals(manualFlags.length, 2, 'queued refetch ran');
     assertEquals(manualFlags[1], true, 'requeued fetch is still manual');
+    scheduler.stop();
+});
+
+test('set_base_interval_reschedules_the_pending_tick', async () => {
+    const {scheduler, timers, calls} = makeScheduler();
+    scheduler.start();
+    await settle();
+    assertEquals(JSON.stringify(timers.delays), JSON.stringify([60]));
+
+    scheduler.setBaseInterval(300);
+    assertEquals(JSON.stringify(timers.delays), JSON.stringify([300]),
+        'pending tick moved to the new cadence');
+    assertEquals(calls.length, 1, 'an interval change is not a refresh');
+
+    timers.fireNext();
+    await settle();
+    assertEquals(JSON.stringify(timers.delays), JSON.stringify([300]),
+        'the new cadence persists across ticks');
+    scheduler.stop();
+});
+
+test('set_base_interval_during_inflight_fetch_applies_to_the_next_tick', async () => {
+    const {scheduler, timers, setFetch} = makeScheduler();
+    let resolveFetch;
+    setFetch(() => new Promise(resolve => {
+        resolveFetch = resolve;
+    }));
+    scheduler.start();
+    scheduler.setBaseInterval(120);
+    resolveFetch(okSnapshot(T0));
+    await settle();
+    assertEquals(JSON.stringify(timers.delays), JSON.stringify([120]));
+    scheduler.stop();
+});
+
+test('set_base_interval_same_value_leaves_the_pending_timer_untouched', async () => {
+    const {scheduler, timers} = makeScheduler();
+    scheduler.start();
+    await settle();
+    const [pendingId] = timers.pending.keys();
+    scheduler.setBaseInterval(60);
+    assertEquals([...timers.pending.keys()][0], pendingId,
+        'no-op change does not reschedule');
+    scheduler.stop();
+});
+
+test('set_base_interval_in_backoff_respects_the_new_floor', async () => {
+    const {scheduler, timers, setFetch} = makeScheduler();
+    setFetch(now => Promise.resolve(errorSnapshot(now)));
+    scheduler.start();
+    await settle();
+    assertEquals(timers.delays[0], 60, 'precondition: failure #1 rung');
+    scheduler.setBaseInterval(600);
+    assertEquals(timers.delays[0], 600,
+        'a 10-min preference must not keep the 1-min failure rung');
+    scheduler.stop();
+});
+
+test('set_base_interval_while_stopped_applies_on_the_next_start', async () => {
+    const {scheduler, timers} = makeScheduler();
+    scheduler.setBaseInterval(300);
+    scheduler.start();
+    await settle();
+    assertEquals(timers.delays[0], 300);
     scheduler.stop();
 });
 

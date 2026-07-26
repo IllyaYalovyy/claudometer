@@ -21,6 +21,7 @@ import {
     REFRESH_INTERVALS_SEC,
     WARNING_PERCENT_MAX,
     WARNING_PERCENT_MIN,
+    displayOptions,
     normalizeHeadlineMetric,
     normalizeIndicatorStyle,
     normalizeRefreshInterval,
@@ -237,6 +238,29 @@ test('non_numeric_threshold_edit_leaves_thresholds_unchanged', () => {
     assertThresholds(
         setCriticalPercent({warningPercent: 70, criticalPercent: 90}, null),
         70, 90, 'null critical edit');
+});
+
+// ------------------------------------------------------- model option bags
+
+test('display_options_map_the_prefs_onto_the_model_opts', () => {
+    // The one bag extension.js hands to indicator_model and menu_model;
+    // each destructures only the keys it knows.
+    const opts = displayOptions(DEFAULTS);
+    assertEquals(opts.displayMode, ICON_AND_PERCENT);
+    assertEquals(opts.headlineMetric, HEADLINE_AUTO);
+    assertEquals(opts.warningAt, 80);
+    assertEquals(opts.criticalAt, 95);
+    assertEquals(opts.staleAfterMs, 180000);
+});
+
+test('stale_threshold_follows_three_times_the_refresh_interval', () => {
+    // §3.3 "data older than 3× poll interval": the stale boundary moves
+    // with the §7 interval preference, not with the 60 s default.
+    for (const sec of REFRESH_INTERVALS_SEC) {
+        assertEquals(
+            displayOptions({...DEFAULTS, refreshIntervalSec: sec}).staleAfterMs,
+            3 * sec * 1000, `${sec} s interval`);
+    }
 });
 
 runTests();

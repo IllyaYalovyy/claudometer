@@ -5,9 +5,30 @@ import {ClaudometerIndicator} from './indicator.js';
 import {ClaudometerMenu} from './menu.js';
 import {UsageSource} from './lib/source.js';
 import {Scheduler} from './lib/scheduler.js';
+import {
+    displayOptions,
+    normalizeHeadlineMetric,
+    normalizeIndicatorStyle,
+    normalizeRefreshInterval,
+    normalizeThresholds,
+} from './lib/settings_model.js';
+
+// The §7 keys the extension re-reads live; every change re-renders the
+// current snapshot (and rebases the scheduler) without disable/enable.
+const SETTINGS_KEYS = [
+    'indicator-style',
+    'headline-metric',
+    'warning-percent',
+    'critical-percent',
+    'refresh-interval-seconds',
+];
 
 export default class ClaudometerExtension extends Extension {
     enable() {
+        this._settings = this.getSettings();
+        const prefs = this._readPrefs();
+        this._opts = displayOptions(prefs);
+
         this._indicator = new ClaudometerIndicator();
 
         // The RFC-001 Option C source: the ~/.claude.json cache is the
@@ -17,19 +38,27 @@ export default class ClaudometerExtension extends Extension {
         this._scheduler = new Scheduler({
             fetch: (now, opts) => this._source.fetch(now, opts),
             onSnapshot: snapshot => this._applySnapshot(snapshot),
+            baseIntervalSec: prefs.refreshIntervalSec,
         });
         this._menu = new ClaudometerMenu(this._indicator.menu, this._scheduler);
+        this._settingsIds = SETTINGS_KEYS.map(key =>
+            this._settings.connect(`changed::${key}`,
+                () => this._onSettingsChanged()));
 
         // Honest pre-fetch rendering: the unavailable state, never 0%
         // (designs/UX-DESIGN.md §1); the first fetch lands right after
         // start().
-        this._indicator.update(null, Date.now());
+        this._applySnapshot(null);
         // §3.2: right box, before the quick-settings aggregate.
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
         this._scheduler.start();
     }
 
     disable() {
+        for (const id of this._settingsIds ?? [])
+            this._settings.disconnect(id);
+        this._settingsIds = null;
+        this._settings = null;
         this._scheduler?.stop();
         this._scheduler = null;
         this._source = null;
@@ -39,9 +68,37 @@ export default class ClaudometerExtension extends Extension {
         this._indicator = null;
     }
 
+    // Every read goes through the settings_model normalizers: the schema
+    // enforces per-key ranges, but not the warning<critical rule or the
+    // discrete interval set — a CLI write can violate both.
+    _readPrefs() {
+        return {
+            indicatorStyle: normalizeIndicatorStyle(
+                this._settings.get_string('indicator-style')),
+            headlineMetric: normalizeHeadlineMetric(
+                this._settings.get_string('headline-metric')),
+            ...normalizeThresholds({
+                warningPercent: this._settings.get_int('warning-percent'),
+                criticalPercent: this._settings.get_int('critical-percent'),
+            }),
+            refreshIntervalSec: normalizeRefreshInterval(
+                this._settings.get_int('refresh-interval-seconds')),
+        };
+    }
+
+    // §7 rationale: changes apply live. Rebuild the option bags, move the
+    // scheduler's cadence (the stale threshold follows as 3× the interval
+    // inside displayOptions), and re-render the snapshot already on screen.
+    _onSettingsChanged() {
+        const prefs = this._readPrefs();
+        this._opts = displayOptions(prefs);
+        this._scheduler.setBaseInterval(prefs.refreshIntervalSec);
+        this._applySnapshot(this._scheduler.snapshot);
+    }
+
     _applySnapshot(snapshot) {
         const now = Date.now();
-        this._indicator.update(snapshot, now);
-        this._menu.update(snapshot, now);
+        this._indicator.update(snapshot, now, this._opts);
+        this._menu.update(snapshot, now, this._opts);
     }
 }

@@ -6,6 +6,10 @@ import {test, assertEquals, runTests} from '../harness.js';
 import {
     constraintOf,
     classify,
+    headlineOf,
+    HEADLINE_AUTO,
+    HEADLINE_SESSION,
+    HEADLINE_WEEK,
     NORMAL,
     WARNING,
     CRITICAL,
@@ -171,6 +175,60 @@ test('unavailable_beats_everything_including_staleness', () => {
     ];
     for (const [label, snapshot] of cases)
         assertEquals(classify(snapshot, NOW), UNAVAILABLE, label);
+});
+
+test('headline_pins_to_the_chosen_window_when_it_exists', () => {
+    // §7 "Headline metric": session/week pin the panel headline to that
+    // window even when another window is more constrained.
+    const snapshot = {
+        fetchedAt: NOW,
+        session: {percent: 27, resetsAt: RESET},
+        week: {percent: 62, resetsAt: RESET + 1},
+    };
+    const session = headlineOf(snapshot, HEADLINE_SESSION);
+    assertEquals(session.kind, 'session');
+    assertEquals(session.percent, 27);
+    assertEquals(session.resetsAt, RESET);
+    const week = headlineOf(snapshot, HEADLINE_WEEK);
+    assertEquals(week.kind, 'week');
+    assertEquals(week.percent, 62);
+});
+
+test('headline_auto_and_missing_metric_are_the_constraint', () => {
+    const snapshot = {
+        fetchedAt: NOW,
+        session: {percent: 27, resetsAt: RESET},
+        week: {percent: 62, resetsAt: RESET + 1},
+    };
+    assertEquals(headlineOf(snapshot, HEADLINE_AUTO).kind, 'week', 'auto');
+    assertEquals(headlineOf(snapshot).kind, 'week', 'metric omitted');
+});
+
+test('pinning_to_an_absent_window_falls_back_to_the_constraint', () => {
+    // Pinning picks among windows the plan actually has (§1 honesty): a
+    // session pin on a week-only snapshot headlines the week, and a pin on
+    // a windowless snapshot is still the unavailable state, never a
+    // fabricated window.
+    const weekOnly = {fetchedAt: NOW, week: {percent: 62, resetsAt: RESET}};
+    assertEquals(headlineOf(weekOnly, HEADLINE_SESSION).kind, 'week');
+    assertEquals(headlineOf({fetchedAt: NOW}, HEADLINE_SESSION), null);
+    assertEquals(headlineOf(null, HEADLINE_WEEK), null);
+});
+
+test('classification_follows_the_pinned_headline_window', () => {
+    // §7 rationale: a user pinned to the session window chose not to care
+    // about the weekly one — the indicator must not go critical for it.
+    const snapshot = {
+        fetchedAt: NOW,
+        session: {percent: 12, resetsAt: RESET},
+        week: {percent: 97, resetsAt: RESET + 1},
+    };
+    assertEquals(classify(snapshot, NOW, {headlineMetric: HEADLINE_SESSION}),
+        NORMAL);
+    assertEquals(classify(snapshot, NOW, {headlineMetric: HEADLINE_WEEK}),
+        CRITICAL);
+    assertEquals(classify(snapshot, NOW, {headlineMetric: HEADLINE_AUTO}),
+        CRITICAL);
 });
 
 test('exports_the_six_states_as_stable_strings', () => {

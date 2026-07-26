@@ -5,17 +5,17 @@
 // a CLI write can violate both, so every read goes through the normalize
 // functions here. No Shell imports; importable under plain `gjs -m`.
 
+import {HEADLINE_AUTO, HEADLINE_SESSION, HEADLINE_WEEK} from './derive.js';
 import {ICON_AND_PERCENT, ICON_ONLY, PERCENT_ONLY} from './indicator_model.js';
 
 // §7 "Indicator style" — the values are indicator_model's display modes,
 // stored verbatim in the `indicator-style` key.
 export const INDICATOR_STYLES = [ICON_AND_PERCENT, ICON_ONLY, PERCENT_ONLY];
 
-// §7 "Headline metric": auto = most constrained window (derive.js
-// constraintOf); session/week pin the headline to that window.
-export const HEADLINE_AUTO = 'auto';
-export const HEADLINE_SESSION = 'session';
-export const HEADLINE_WEEK = 'week';
+// §7 "Headline metric": auto = most constrained window; session/week pin
+// the headline to that window. The values live in derive.js (headlineOf's
+// vocabulary) and are stored verbatim in the `headline-metric` key.
+export {HEADLINE_AUTO, HEADLINE_SESSION, HEADLINE_WEEK};
 export const HEADLINE_METRICS = [HEADLINE_AUTO, HEADLINE_SESSION, HEADLINE_WEEK];
 
 // §6/§7 refresh cadence choices (seconds).
@@ -36,6 +36,30 @@ export const DEFAULTS = Object.freeze({
     criticalPercent: 95,
     refreshIntervalSec: 60,
 });
+
+// §3.3 stale trigger: "data older than 3× poll interval" — the stale
+// boundary follows the configured cadence, not the 60 s default.
+export const STALE_INTERVAL_MULTIPLIER = 3;
+
+// Map normalized §7 preferences onto the options bag the pure render
+// models consume (indicator_model, menu_model, and classify() underneath
+// them); each destructures only the keys it knows. extension.js rebuilds
+// this on every settings change and re-feeds the current snapshot.
+export function displayOptions({
+    indicatorStyle,
+    headlineMetric,
+    warningPercent,
+    criticalPercent,
+    refreshIntervalSec,
+}) {
+    return {
+        displayMode: indicatorStyle,
+        headlineMetric,
+        warningAt: warningPercent,
+        criticalAt: criticalPercent,
+        staleAfterMs: STALE_INTERVAL_MULTIPLIER * refreshIntervalSec * 1000,
+    };
+}
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Math.round(value)));

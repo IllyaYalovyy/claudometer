@@ -16,7 +16,14 @@
 //                  (§3.1); null for hourglass/unavailable, which draw no
 //                  fill — never a fabricated number (§1)
 
-import {classify, constraintOf, LIMIT_HIT, STALE, UNAVAILABLE} from './derive.js';
+import {
+    classify,
+    headlineOf,
+    HEADLINE_AUTO,
+    LIMIT_HIT,
+    STALE,
+    UNAVAILABLE,
+} from './derive.js';
 import {
     formatAge,
     formatCountdown,
@@ -53,6 +60,7 @@ function resetClause(constraint, now, clock24) {
 export function indicatorModel(snapshot, now, opts = {}) {
     const {
         displayMode = ICON_AND_PERCENT,
+        headlineMetric = HEADLINE_AUTO,
         clock24 = true,
         warningAt = 80,
     } = opts;
@@ -73,7 +81,7 @@ export function indicatorModel(snapshot, now, opts = {}) {
         };
     }
 
-    const constraint = constraintOf(snapshot);
+    const constraint = headlineOf(snapshot, headlineMetric);
     const name = windowName(constraint);
     let labelText, iconVariant, iconPercent, accessibleName;
 
