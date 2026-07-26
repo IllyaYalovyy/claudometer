@@ -5,6 +5,11 @@
 // any timezone.
 import {test, assertEquals, runTests} from '../harness.js';
 import {menuModel} from '../../src/lib/menu_model.js';
+import {
+    NOT_INSTALLED,
+    NOT_AUTHENTICATED,
+    UNPARSEABLE,
+} from '../../src/lib/snapshot.js';
 
 const MIN = 60000;
 
@@ -130,16 +135,18 @@ test('footer_freshness_covers_just_now_minutes_and_stale', () => {
 });
 
 test('absent_windows_yield_no_sections_but_keep_the_footer', () => {
-    // §4.1: no empty placeholder sections; the footer (freshness +
-    // refresh escape hatch) still renders for windowless snapshots.
+    // §4.1: no empty placeholder sections. Unavailable snapshots (§4.5)
+    // date-stamp the attempt — "Last tried", never "Updated": nothing
+    // usable was obtained, so claiming an update would be dishonest.
     for (const [label, snapshot] of [
         ['windowless', {fetchedAt: NOW - 2 * MIN}],
-        ['error', {fetchedAt: NOW - 2 * MIN, error: 'unparseable'}],
+        ['error', {fetchedAt: NOW - 2 * MIN, error: UNPARSEABLE}],
     ]) {
         const m = model(snapshot);
         assertEquals(m.sections.length, 0, `${label}: sections`);
-        assertEquals(m.footer.freshnessText, 'Updated 2 min ago',
+        assertEquals(m.footer.freshnessText, 'Last tried 2 min ago',
             `${label}: freshnessText`);
+        assertEquals(m.footer.stale, false, `${label}: stale`);
     }
 });
 
@@ -149,6 +156,121 @@ test('null_snapshot_yields_no_sections_and_no_freshness_claim', () => {
     assertEquals(m.sections.length, 0);
     assertEquals(m.footer.freshnessText, null);
     assertEquals(m.footer.stale, false);
+});
+
+// ------------------------------------------------ §4.5 degraded states
+
+test('healthy_snapshot_carries_no_notice_and_no_promotion', () => {
+    const m = model(fullSnapshot());
+    assertEquals(m.notice, null);
+    assertEquals(m.promoted, null);
+});
+
+test('not_installed_renders_the_4_5_not_found_notice', () => {
+    const m = model({fetchedAt: NOW - MIN, error: NOT_INSTALLED});
+    assertEquals(m.notice.headline,
+        'Claude Code was not found on this system.');
+    assertEquals(m.notice.detail,
+        'Claudometer reads usage from a local Claude Code installation.');
+    assertEquals(m.sections.length, 0);
+    assertEquals(m.promoted, null);
+    // The §4.5 not-found menu carries no "last tried" line: there is no
+    // installation to retry against, so the line would imply otherwise.
+    assertEquals(m.footer.freshnessText, null);
+    assertEquals(m.footer.stale, false);
+});
+
+test('unreadable_or_signed_out_renders_cant_read_with_last_tried', () => {
+    // §4.5 groups the two: same plain-language sentence, same action.
+    for (const error of [NOT_AUTHENTICATED, UNPARSEABLE]) {
+        const m = model({fetchedAt: NOW - MIN, error});
+        assertEquals(m.notice.headline, "Can't read usage data.", error);
+        assertEquals(m.notice.detail,
+            'Open Claude Code and sign in, then refresh.', error);
+        assertEquals(m.footer.freshnessText, 'Last tried 1 min ago', error);
+        assertEquals(m.footer.stale, false, error);
+        assertEquals(m.promoted, null, error);
+    }
+});
+
+test('null_and_windowless_snapshots_render_the_generic_notice', () => {
+    // §1: missing data is an explicit unavailable state — the menu must
+    // never render blank, even pre-fetch or for an API-key-only cache.
+    for (const [label, snapshot] of [
+        ['null', null],
+        ['windowless', {fetchedAt: NOW}],
+    ]) {
+        const m = model(snapshot);
+        assertEquals(m.notice.headline, "Can't read usage data.", label);
+        assertEquals(m.notice.detail,
+            'Open Claude Code and sign in, then refresh.', label);
+    }
+});
+
+test('raw_error_strings_never_surface_in_the_menu_model', () => {
+    // §4.5: never a raw error string or exit code in the menu — those go
+    // to the journal. An unknown error value gets the generic notice and
+    // no fragment of it may appear anywhere in the model output.
+    const raw = 'Gio.IOErrorEnum: /home/user/.claude.json: Permission denied';
+    const m = model({fetchedAt: NOW - MIN, error: raw});
+    const rendered = JSON.stringify(m);
+    assertEquals(rendered.includes('Gio.IOErrorEnum'), false, 'error type');
+    assertEquals(rendered.includes('/home/user'), false, 'path');
+    assertEquals(rendered.includes('Permission denied'), false, 'message');
+    assertEquals(m.notice.headline, "Can't read usage data.");
+    assertEquals(m.footer.freshnessText, 'Last tried 1 min ago');
+});
+
+// --------------------------------------------- §4.5 limit-hit promotion
+
+test('limit_hit_promotes_the_constraint_reset_row_above_the_sections', () => {
+    // §4.5: sections render as usual; the constraint's reset row is
+    // promoted to the top as the first line.
+    const now = RESET - 72 * MIN;
+    const m = menuModel({
+        fetchedAt: now - MIN,
+        session: {percent: 100, resetsAt: RESET},
+        week: {percent: 42, resetsAt: FAR_RESET},
+    }, now);
+    assertEquals(m.promoted, 'Session limit reached — resets in 1 h 12 m (17:00)');
+    assertEquals(m.notice, null);
+    assertEquals(m.sections.length, 2, 'sections still render');
+    assertEquals(m.sections[0].percentText, '100%');
+    assertEquals(m.sections[0].barState, 'critical', 'full bar at error color');
+});
+
+test('promotion_names_the_constraint_window', () => {
+    const cases = [
+        [{week: {percent: 100, resetsAt: FAR_RESET}},
+            'Weekly limit reached — resets Tue, Jul 28'],
+        [{weekModel: [{model: 'Opus', percent: 100, resetsAt: FAR_RESET}]},
+            'Weekly Opus limit reached — resets Tue, Jul 28'],
+    ];
+    for (const [windows, expected] of cases) {
+        const m = model({
+            fetchedAt: NOW - MIN,
+            session: {percent: 50, resetsAt: RESET},
+            ...windows,
+        });
+        assertEquals(m.promoted, expected);
+    }
+});
+
+test('limit_hit_without_reset_time_promotes_no_fabricated_countdown', () => {
+    // §1: a missing resetsAt renders nothing, never an invented countdown.
+    const m = model({fetchedAt: NOW - MIN, session: {percent: 100}});
+    assertEquals(m.promoted, 'Session limit reached');
+});
+
+test('stale_limit_hit_is_not_promoted', () => {
+    // derive.js precedence: stale beats limit-hit — a stale reset promise
+    // may already have passed, so the promotion is dropped with it.
+    const m = model({
+        fetchedAt: NOW - 25 * MIN,
+        session: {percent: 100, resetsAt: RESET},
+    });
+    assertEquals(m.promoted, null);
+    assertEquals(m.footer.stale, true);
 });
 
 test('window_without_reset_time_drops_the_reset_row', () => {

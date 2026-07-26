@@ -127,6 +127,14 @@ function label(text, styleClass = null) {
     });
 }
 
+// §4.5 notice lines are sentences, not data rows: wrap them instead of
+// letting a long explainer dictate the menu width (cap in stylesheet.css).
+function noticeLabel(styleClass) {
+    const noticeText = label('', styleClass);
+    noticeText.clutter_text.line_wrap = true;
+    return noticeText;
+}
+
 // Renders menu_model descriptors into `menu` (the indicator's PopupMenu)
 // and drives the scheduler: §5 menu-open implicit refresh, §4.4 manual
 // refresh with an in-button spinner. The caller feeds every scheduler
@@ -141,6 +149,9 @@ export class ClaudometerMenu {
         this._opts = {};
         this._structureKey = null;
         this._rows = [];
+        this._promotedLabel = null;
+        this._noticeHeadline = null;
+        this._noticeDetail = null;
         this._refreshing = false;
         this._tickId = 0;
 
@@ -167,6 +178,9 @@ export class ClaudometerMenu {
         this._menu = null;
         this._scheduler = null;
         this._rows = [];
+        this._promotedLabel = null;
+        this._noticeHeadline = null;
+        this._noticeDetail = null;
         this._freshnessLabel = null;
         this._refreshButton = null;
         this._refreshIcon = null;
@@ -184,15 +198,23 @@ export class ClaudometerMenu {
     }
 
     _render(model) {
-        // Rebuild only when the section structure changes; text-only
-        // changes (countdowns, freshness) update labels in place so an
-        // open menu keeps its keyboard focus.
-        const key = model.sections
-            .map(s => `${s.kind}:${s.resetText === null ? 0 : 1}`)
-            .join('|');
+        // Rebuild only when the structure changes; text-only changes
+        // (countdowns, freshness, notice wording) update labels in place
+        // so an open menu keeps its keyboard focus.
+        const key = (model.promoted === null ? '' : 'promoted|') +
+            (model.notice === null ? '' : 'notice|') +
+            model.sections
+                .map(s => `${s.kind}:${s.resetText === null ? 0 : 1}`)
+                .join('|');
         if (key !== this._structureKey) {
             this._structureKey = key;
             this._rebuild(model);
+        }
+        if (this._promotedLabel !== null)
+            this._promotedLabel.text = model.promoted;
+        if (this._noticeHeadline !== null) {
+            this._noticeHeadline.text = model.notice.headline;
+            this._noticeDetail.text = model.notice.detail;
         }
         model.sections.forEach((section, i) => {
             const row = this._rows[i];
@@ -207,6 +229,24 @@ export class ClaudometerMenu {
 
     _rebuild(model) {
         this._menu.removeAll();
+        this._promotedLabel = null;
+        this._noticeHeadline = null;
+        this._noticeDetail = null;
+        // §4.5 limit-hit promotion: the first line of the menu.
+        if (model.promoted !== null) {
+            this._promotedLabel = label('', 'claudometer-limit-promoted');
+            this._addTextItem(this._promotedLabel);
+            this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        }
+        // §4.5 unavailable notice: sentence, then action; the footer with
+        // its refresh button stays — the user's "I fixed it, check again".
+        if (model.notice !== null) {
+            this._noticeHeadline = noticeLabel('claudometer-notice');
+            this._addTextItem(this._noticeHeadline);
+            this._noticeDetail = noticeLabel('claudometer-notice');
+            this._addTextItem(this._noticeDetail);
+            this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        }
         this._rows = model.sections.map(section => this._addSection(section));
         this._addFooter();
     }

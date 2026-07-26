@@ -77,8 +77,10 @@ from CLI output.
 
 ## Fake executables (`bin/`)
 
-Shell scripts standing in for the `claude` binary in fetcher unit tests
-(the refresh argv is injectable, RFC-001 Design). Each simulates one
+Shell scripts standing in for the `claude` binary in fetcher/source unit
+tests (the refresh argv is injectable, RFC-001 Design). Each simulates one
 failure mode: `emit-file` prints a captured envelope, `emit-garbage` prints
 non-JSON, `exit-nonzero` fails outright, `hang` records its PID and sleeps
-so the timeout kill can be proven. They are test doubles, not captures.
+so the timeout kill can be proven, and `record-refresh` counts its spawns
+in a run log and optionally installs a cache file the way the real CLI
+rewrites `~/.claude.json`. They are test doubles, not captures.

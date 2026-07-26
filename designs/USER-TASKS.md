@@ -64,5 +64,12 @@ stale, blank, or misleading number.
 
 **Interactions:** 0.
 
-**Regression coverage:** TBD - unit test for the unavailable-state branch of
-whichever data source RFC-001 selects.
+**Regression coverage:**
+`tests/unit/degraded_pipeline.test.js::ut_003_walkthrough_not_installed_recover_limit_hit_go_stale`
+(the real fetcher → source → scheduler → render-model pipeline over fake
+CLI binaries), plus per-state unit tests:
+`indicator_model.test.js` (unavailable/stale/limit-hit indicator states),
+`menu_model.test.js::not_installed_renders_the_4_5_not_found_notice`,
+`::unreadable_or_signed_out_renders_cant_read_with_last_tried`,
+`::raw_error_strings_never_surface_in_the_menu_model`, and
+`source.test.js` (failure taxonomy of the composed RFC-001 data source).

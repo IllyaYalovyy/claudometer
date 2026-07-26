@@ -8,6 +8,7 @@ import {
     formatCountdown,
     formatResetRow,
     formatFreshness,
+    formatLastTried,
 } from '../../src/lib/format.js';
 
 const MIN = 60000;
@@ -111,6 +112,18 @@ test('freshness_past_the_stale_limit_states_age_and_failure', () => {
         'Data is 1 h 5 min old — last refresh failed');
     assertEquals(formatFreshness(now - 180000, now, opts),
         'Updated 3 min ago', 'exactly at the limit is not stale');
+});
+
+test('last_tried_mirrors_the_freshness_cadence_without_claiming_data', () => {
+    // §4.5 degraded footer: the fetch was attempted, nothing usable came
+    // back — "tried", never "updated". Same 30 s / whole-minute wording
+    // rhythm as formatFreshness so the footer reads consistently.
+    const now = 1785000000000;
+    assertEquals(formatLastTried(now - 10000, now), 'Last tried just now');
+    assertEquals(formatLastTried(now - 29999, now), 'Last tried just now');
+    assertEquals(formatLastTried(now - MIN, now), 'Last tried 1 min ago');
+    assertEquals(formatLastTried(now - 25 * MIN, now),
+        'Last tried 25 min ago');
 });
 
 runTests();

@@ -3,20 +3,19 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {ClaudometerIndicator} from './indicator.js';
 import {ClaudometerMenu} from './menu.js';
-import {defaultConfig, fetchSnapshot} from './lib/fetcher.js';
+import {UsageSource} from './lib/source.js';
 import {Scheduler} from './lib/scheduler.js';
 
 export default class ClaudometerExtension extends Extension {
     enable() {
         this._indicator = new ClaudometerIndicator();
 
-        // The fetch is a read of the ~/.claude.json cache only — no CLI
-        // spawn, so this path cannot cost tokens (VISION G1). Composing
-        // the refresh trigger (fetcher.refreshCache) into the fetch is the
-        // degraded-states wiring task (#10).
-        const config = defaultConfig();
+        // The RFC-001 Option C source: the ~/.claude.json cache is the
+        // only parse surface; the proven token-free CLI spawn only
+        // refreshes it, behind the source's G1 tripwire (VISION G1).
+        this._source = new UsageSource();
         this._scheduler = new Scheduler({
-            fetch: now => fetchSnapshot(config, now),
+            fetch: (now, opts) => this._source.fetch(now, opts),
             onSnapshot: snapshot => this._applySnapshot(snapshot),
         });
         this._menu = new ClaudometerMenu(this._indicator.menu, this._scheduler);
@@ -33,6 +32,7 @@ export default class ClaudometerExtension extends Extension {
     disable() {
         this._scheduler?.stop();
         this._scheduler = null;
+        this._source = null;
         this._menu?.destroy();
         this._menu = null;
         this._indicator?.destroy();

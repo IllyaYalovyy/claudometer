@@ -79,3 +79,13 @@ export function formatFreshness(fetchedAt, now, opts = {}) {
         return 'Updated just now';
     return `Updated ${Math.round(age / MINUTE_MS)} min ago`;
 }
+
+// §4.5 degraded footer: the fetch was attempted, nothing usable came back
+// — "tried", never "updated". Same 30 s / whole-minute rhythm as
+// formatFreshness so the footer reads consistently across states.
+export function formatLastTried(triedAt, now) {
+    const age = now - triedAt;
+    if (age < 30000)
+        return 'Last tried just now';
+    return `Last tried ${Math.round(age / MINUTE_MS)} min ago`;
+}

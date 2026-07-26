@@ -70,8 +70,10 @@ const glibTimers = {
 //
 //   new Scheduler({fetch, onSnapshot, baseIntervalSec, wakeSources})
 //
-// - fetch(now): injected async data source; resolves to a UsageSnapshot
-//   (error snapshots included).
+// - fetch(now, {manual}): injected async data source; resolves to a
+//   UsageSnapshot (error snapshots included). `manual` marks fetches the
+//   user initiated (refreshNow/maybeRefresh) so a source can skip its own
+//   freshness gate — RFC-001's "manual refresh always spawns".
 // - onSnapshot(snapshot): listener; called for every completed fetch.
 // - wakeSources: unlock/resume triggers (§6) as GObject-style entries
 //   {source, signal, wants?}. start() connects source.connect(signal, cb),
@@ -100,6 +102,7 @@ export class Scheduler {
         this._timeoutId = 0;
         this._inFlight = false;
         this._refetchQueued = false;
+        this._manualQueued = false;
         this._wakeIds = [];
         this._snapshot = null;
         this._fetchedAt = null;
@@ -137,13 +140,17 @@ export class Scheduler {
             source.disconnect(id);
         this._wakeIds = [];
         this._refetchQueued = false;
+        this._manualQueued = false;
     }
 
-    // Manual refresh (§6): fetch immediately and reset the backoff.
+    // Manual refresh (§6): fetch immediately and reset the backoff. The
+    // flag is consumed by the next fetch to *start*, so a manual refresh
+    // queued behind an in-flight tick still reaches the source as manual.
     refreshNow() {
         if (!this._running)
             return;
         this._state = nextState(this._state, 'manual');
+        this._manualQueued = true;
         this._refreshSoon();
     }
 
@@ -181,10 +188,12 @@ export class Scheduler {
             return;
         }
         this._inFlight = true;
+        const manual = this._manualQueued;
+        this._manualQueued = false;
         const startedAt = this._now();
         let snapshot;
         try {
-            snapshot = await this._fetch(startedAt);
+            snapshot = await this._fetch(startedAt, {manual});
         } catch (e) {
             // The fetch contract is "never reject"; a rejection means the
             // source layer itself broke. Cause to the journal, an

@@ -134,10 +134,12 @@ function makeScheduler({base = 60, wakeSources = [], onSnapshot} = {}) {
     const clock = {value: T0};
     const snapshots = [];
     const calls = [];
+    const manualFlags = [];
     let fetchImpl = now => Promise.resolve(okSnapshot(now));
     const scheduler = new Scheduler({
-        fetch: now => {
+        fetch: (now, opts) => {
             calls.push(now);
+            manualFlags.push(opts?.manual === true);
             return fetchImpl(now);
         },
         onSnapshot: onSnapshot ?? (s => snapshots.push(s)),
@@ -147,7 +149,7 @@ function makeScheduler({base = 60, wakeSources = [], onSnapshot} = {}) {
         timers,
     });
     return {
-        scheduler, timers, clock, snapshots, calls,
+        scheduler, timers, clock, snapshots, calls, manualFlags,
         setFetch: fn => {
             fetchImpl = fn;
         },
@@ -424,6 +426,47 @@ test('maybe_refresh_fires_only_past_max_age', async () => {
     assertEquals(scheduler.maybeRefresh(15000), true, 'past max age');
     assertEquals(calls.length, 2);
     await settle();
+    scheduler.stop();
+});
+
+test('user_initiated_refreshes_are_flagged_manual_to_the_fetch', async () => {
+    // RFC-001: "manual refresh always spawns" — the data source needs to
+    // know a fetch is user-initiated so it can skip its own freshness
+    // gate. Ticks and start-up fetches are not manual.
+    const {scheduler, timers, clock, manualFlags} = makeScheduler();
+    scheduler.start();
+    await settle();
+    assertEquals(manualFlags[0], false, 'start fetch is not manual');
+
+    scheduler.refreshNow();
+    await settle();
+    assertEquals(manualFlags[1], true, 'refreshNow is manual');
+
+    timers.fireNext();
+    await settle();
+    assertEquals(manualFlags[2], false, 'the next tick is not manual');
+
+    clock.value += 20000;
+    assertEquals(scheduler.maybeRefresh(15000), true);
+    await settle();
+    assertEquals(manualFlags[3], true, 'menu-open refresh is manual');
+    scheduler.stop();
+});
+
+test('manual_flag_survives_the_inflight_requeue', async () => {
+    // A manual refresh landing during an in-flight tick queues one more
+    // fetch — that queued fetch must still carry the manual flag.
+    const {scheduler, manualFlags, setFetch} = makeScheduler();
+    let resolveFetch;
+    setFetch(() => new Promise(resolve => {
+        resolveFetch = resolve;
+    }));
+    scheduler.start();
+    scheduler.refreshNow();
+    resolveFetch(okSnapshot(T0));
+    await settle();
+    assertEquals(manualFlags.length, 2, 'queued refetch ran');
+    assertEquals(manualFlags[1], true, 'requeued fetch is still manual');
     scheduler.stop();
 });
 

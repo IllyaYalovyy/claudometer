@@ -32,3 +32,16 @@
 .claudometer-footer-stale {
     color: #f5c211;
 }
+
+/* §4.5 limit-hit promotion: the reset row recast as the menu's first
+ * line, in the same error constant as the critical states above. */
+
+.claudometer-limit-promoted {
+    color: #c01c28;
+}
+
+/* §4.5 notice sentences wrap instead of dictating the menu width. */
+
+.claudometer-notice {
+    max-width: 320px;
+}

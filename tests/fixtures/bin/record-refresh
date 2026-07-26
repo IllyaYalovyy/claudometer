@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fake `claude` for data-source tests: appends a line to the run log ($1)
+# so tests can count spawns, optionally installs a cache file (cp $3 $4)
+# the way the real CLI rewrites ~/.claude.json on a refresh, then emits
+# the envelope file ($2) as its stdout. See tests/fixtures/README.md.
+echo run >> "$1"
+if [ "$#" -ge 4 ]; then
+    cp "$3" "$4"
+fi
+exec cat "$2"
