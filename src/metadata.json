@@ -3,6 +3,7 @@
     "name": "Claudometer",
     "description": "Claude Code usage in the top panel, without spending tokens to check it.",
     "shell-version": ["49"],
+    "version-name": "0.1.0",
     "url": "https://github.com/IllyaYalovyy/claudometer",
     "settings-schema": "org.gnome.shell.extensions.claudometer",
     "gettext-domain": "claudometer"

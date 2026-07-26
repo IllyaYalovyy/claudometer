@@ -1,7 +1,7 @@
 # Developing Claudometer
 
-How to run the extension from a working tree, test it in a nested GNOME
-Shell, and read its logs. Target platform: GNOME Shell 49, Wayland.
+How to run the extension from a working tree, test it in a throwaway
+headless GNOME Shell, and read its logs. Target platform: GNOME Shell 49, Wayland.
 
 ## Install from the working tree
 
@@ -32,28 +32,36 @@ gnome-extensions disable claudometer@illyayalovyy.github.io
 gnome-extensions info claudometer@illyayalovyy.github.io   # state + errors
 ```
 
-## Manual testing in a nested session
+## Manual testing in a throwaway session
 
 Never iterate on your live session — a broken `enable()` can degrade the
-Shell you are working in. Run a nested Shell instead (from a terminal
-inside your normal session):
+Shell you are working in. GNOME Shell 49 removed `--nested`; run a
+throwaway headless Shell instead (from a terminal inside your normal
+session):
 
 ```bash
-dbus-run-session -- gnome-shell --nested --wayland
+GSETTINGS_BACKEND=memory dbus-run-session -- sh -c \
+    'echo "$DBUS_SESSION_BUS_ADDRESS" >/tmp/nested-bus; \
+     exec gnome-shell --headless --virtual-monitor 1280x720 --unsafe-mode'
 ```
 
-This opens a window containing a complete, throwaway GNOME Shell that reads
-the same extensions directory. Inside it, open a terminal (or use the
-`gnome-extensions` CLI from outside with `DBUS_SESSION_BUS_ADDRESS` of the
-nested session) and enable the extension. Closing the window discards the
-session.
+This runs a complete, throwaway GNOME Shell that reads the same extensions
+directory. `GSETTINGS_BACKEND=memory` keeps it from touching your live
+session's dconf (which also means the `gnome-extensions` CLI cannot enable
+the extension there — it writes dconf). Drive it over its own D-Bus
+instead:
 
-Useful variations:
+```bash
+export DBUS_SESSION_BUS_ADDRESS=$(cat /tmp/nested-bus)
+gdbus call --session --dest org.gnome.Shell \
+    --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Extensions.EnableExtension \
+    "claudometer@illyayalovyy.github.io"
+```
 
-- `MUTTER_DEBUG_DUMMY_MODE_SPECS=1280x720 dbus-run-session -- gnome-shell --nested --wayland`
-  to control the nested window size.
-- `dbus-run-session -- gnome-shell --headless --virtual-monitor 1280x720`
-  for a display-less run (CI-ish smoke checks; interact via D-Bus).
+`--unsafe-mode` enables `org.gnome.Shell.Eval` for poking at the running
+Shell (opening the menu, taking screenshots via `Shell.Screenshot`).
+Killing the `gnome-shell` process discards the session.
 
 ## Reading logs
 

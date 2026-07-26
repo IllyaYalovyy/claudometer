@@ -8,6 +8,7 @@ cd "${repo_root}"
 echo "extension: validating src/metadata.json"
 python3 - <<'PY'
 import json
+import re
 import sys
 
 try:
@@ -17,7 +18,7 @@ except (OSError, json.JSONDecodeError) as e:
     sys.exit(f"FAIL: src/metadata.json: {e}")
 
 required = ["uuid", "name", "description", "shell-version", "url",
-            "settings-schema"]
+            "settings-schema", "version-name"]
 missing = [key for key in required if key not in meta]
 if missing:
     sys.exit(f"FAIL: src/metadata.json: missing required keys: {missing}")
@@ -27,6 +28,14 @@ if (not isinstance(versions, list) or not versions
         or not all(isinstance(v, str) for v in versions)):
     sys.exit("FAIL: src/metadata.json: shell-version must be a non-empty "
              "list of strings")
+
+# version-name is the single source of truth for the release version;
+# scripts/package.sh reads it to name the artifact.
+version_name = meta["version-name"]
+if (not isinstance(version_name, str)
+        or not re.fullmatch(r"[0-9]+(\.[0-9]+){0,2}", version_name)):
+    sys.exit("FAIL: src/metadata.json: version-name must be a dotted "
+             f"numeric string like '0.1.0', got {version_name!r}")
 
 print("metadata.json: OK")
 PY
