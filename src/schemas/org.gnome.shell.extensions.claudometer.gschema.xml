@@ -51,6 +51,18 @@
         Kept strictly above warning-percent.
       </description>
     </key>
+    <key name="refresh-path-disabled" type="b">
+      <default>false</default>
+      <summary>CLI refresh path disabled (G1 tripwire)</summary>
+      <description>
+        Latched by the extension when a CLI refresh envelope could not
+        prove zero model cost (RFC-001 G1 tripwire). While true the
+        extension never spawns the Claude CLI and only reads the cache
+        file. Per RFC-001, cleared only by explicit user action:
+        gsettings set org.gnome.shell.extensions.claudometer
+        refresh-path-disabled false.
+      </description>
+    </key>
     <key name="refresh-interval-seconds" type="i">
       <range min="30" max="600"/>
       <default>60</default>

@@ -59,9 +59,10 @@ function spawnCount(logPath) {
 
 // A source over a temp cache file and the record-refresh fake. `install`
 // makes the fake copy that file over the cache path, standing in for the
-// real CLI rewriting ~/.claude.json.
+// real CLI rewriting ~/.claude.json. Extra `sourceOpts` reach the
+// UsageSource constructor (the #17 persistence wiring).
 function makeSource(name, {cache = null, envelope = ENVELOPE_FIXTURE,
-    install = null, argv = null} = {}) {
+    install = null, argv = null, sourceOpts = {}} = {}) {
     const filePath = tmpPath(`${name}-claude.json`);
     if (cache !== null)
         GLib.file_set_contents(filePath, cache);
@@ -72,8 +73,17 @@ function makeSource(name, {cache = null, envelope = ENVELOPE_FIXTURE,
     ];
     const source = new UsageSource({
         config: {filePath, refreshArgv, refreshTimeoutMs: 5000},
+        ...sourceOpts,
     });
     return {source, log, filePath};
+}
+
+// An envelope the G1 tripwire must reject: the committed capture with a
+// nonzero cost, written once for every persistence test to share.
+function trippedEnvelope(name) {
+    const envelope = JSON.parse(readText(ENVELOPE_FIXTURE));
+    envelope.total_cost_usd = 0.42;
+    return writeTmp(`${name}-envelope.json`, JSON.stringify(envelope));
 }
 
 test('default_refresh_threshold_is_the_ux_6_poll_interval', () => {
@@ -158,12 +168,8 @@ test('model_invoked_permanently_disables_the_refresh_path', async () => {
     // RFC-001 G1 tripwire, fail-closed: one envelope that cannot prove
     // zero cost and the CLI is never spawned again — degraded freshness
     // is acceptable, spending tokens is not. The file data stays served.
-    const envelope = JSON.parse(readText(ENVELOPE_FIXTURE));
-    envelope.total_cost_usd = 0.42;
-    const tripwire = writeTmp('tripwire-envelope.json',
-        JSON.stringify(envelope));
     const {source, log} = makeSource('tripwire',
-        {cache: cacheFileText(), envelope: tripwire});
+        {cache: cacheFileText(), envelope: trippedEnvelope('tripwire')});
 
     assertEquals(source.refreshDisabled, false);
     const first = await source.fetch(STALE_NOW);
@@ -174,6 +180,74 @@ test('model_invoked_permanently_disables_the_refresh_path', async () => {
     const second = await source.fetch(STALE_NOW + 60000, {manual: true});
     assertEquals(spawnCount(log), 1, 'no further spawns, even manual');
     assertEquals(second.session.percent, 27);
+});
+
+test('persisted_disable_holds_from_the_first_fetch', async () => {
+    // #17: the tripwire survives sessions — a source constructed over the
+    // persisted refresh-path-disabled flag never spawns, not even for a
+    // manual refresh, while the cache file stays served read-only.
+    const {source, log} = makeSource('persisted', {
+        cache: cacheFileText(),
+        envelope: trippedEnvelope('persisted'),
+        sourceOpts: {refreshDisabled: true},
+    });
+    assertEquals(source.refreshDisabled, true, 'armed from construction');
+    const snap = await source.fetch(STALE_NOW, {manual: true});
+    assertEquals(spawnCount(log), 0, 'no spawn under a persisted disable');
+    assertEquals(snap.session.percent, 27, 'file data still served');
+});
+
+test('tripwire_reports_the_disable_to_the_persistence_hook', async () => {
+    // The source is pure (no GSettings import); persistence happens
+    // through the injected hook, called exactly once per trip.
+    let persisted = 0;
+    const {source, log} = makeSource('persist-hook', {
+        cache: cacheFileText(),
+        envelope: trippedEnvelope('persist-hook'),
+        sourceOpts: {onRefreshDisabled: () => persisted++},
+    });
+    await source.fetch(STALE_NOW);
+    assertEquals(source.refreshDisabled, true);
+    assertEquals(persisted, 1, 'the disable was handed to the hook');
+    await source.fetch(STALE_NOW + 60000, {manual: true});
+    assertEquals(spawnCount(log), 1, 'still no further spawns');
+    assertEquals(persisted, 1, 'the hook fires once, not per fetch');
+});
+
+test('ordinary_refresh_failures_never_reach_the_persistence_hook', async () => {
+    // Only a MODEL_INVOKED verdict is the G1 tripwire; a plain broken
+    // spawn must not latch the persisted disable.
+    let persisted = 0;
+    const {source} = makeSource('plain-failure', {
+        cache: cacheFileText(),
+        argv: [EXIT_NONZERO],
+        sourceOpts: {onRefreshDisabled: () => persisted++},
+    });
+    await source.fetch(STALE_NOW);
+    assertEquals(source.refreshDisabled, false);
+    assertEquals(persisted, 0);
+});
+
+test('explicit_re_enable_re_arms_the_refresh_path_and_the_tripwire', async () => {
+    // RFC-001: re-enable only by explicit user action. After
+    // setRefreshDisabled(false) the spawn path works again — and trips
+    // again on the next bad envelope, re-reporting to the hook.
+    let persisted = 0;
+    const {source, log} = makeSource('re-enable', {
+        cache: cacheFileText(),
+        envelope: trippedEnvelope('re-enable'),
+        sourceOpts: {onRefreshDisabled: () => persisted++},
+    });
+    await source.fetch(STALE_NOW);
+    assertEquals(source.refreshDisabled, true, 'precondition: tripped');
+    assertEquals(spawnCount(log), 1);
+
+    source.setRefreshDisabled(false);
+    assertEquals(source.refreshDisabled, false, 're-armed');
+    await source.fetch(STALE_NOW + 60000);
+    assertEquals(spawnCount(log), 2, 'the refresh path spawns again');
+    assertEquals(source.refreshDisabled, true, 'and trips again');
+    assertEquals(persisted, 2, 'the re-trip reaches the hook too');
 });
 
 runTests();

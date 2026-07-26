@@ -110,14 +110,25 @@ All changes apply immediately; no re-enable needed.
   rewrites of its local usage cache (a few minutes between updates is
   normal). Brief stale windows on a working setup are a known cosmetic
   issue ([#16](https://github.com/IllyaYalovyy/claudometer/issues/16)).
+- **Data stays stale and the journal says "disabling the CLI refresh
+  path"** — the zero-token tripwire fired: a refresh could not prove it
+  made no model calls, so Claudometer stopped running the CLI (across
+  restarts too) and only reads the local cache. If you have verified the
+  cause — typically a CLI update, see the journal line — re-enable
+  explicitly:
+
+  ```bash
+  gsettings set org.gnome.shell.extensions.claudometer refresh-path-disabled false
+  ```
+
 - Diagnostics land in the journal, never in the menu:
   `journalctl -f -o cat /usr/bin/gnome-shell | grep -i claudometer`.
 
 **The zero-token guarantee:** checking your usage never spends it. The
 extension only reads Claude Code's local cache; the one command it may
 run (`claude -p "/usage"`) is proven to make no model calls, and a
-runtime tripwire permanently disables that path if a future CLI version
-ever changes that.
+runtime tripwire permanently disables that path — persistently, until
+you explicitly re-enable it — if a future CLI version ever changes that.
 
 ## Status
 

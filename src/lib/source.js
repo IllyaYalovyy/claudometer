@@ -9,11 +9,13 @@
 // importable under plain `gjs -m`.
 //
 // G1 fail-closed rule (RFC-001 drift detection 2): the first MODEL_INVOKED
-// verdict from a spawn permanently disables the refresh path for this
-// source — degraded freshness is acceptable, spending tokens is not. The
-// cache file remains served read-only. (Persisting the disable across
-// sessions is the GSettings task, #11; until then it holds for the
-// extension's lifetime.)
+// verdict from a spawn permanently disables the refresh path — degraded
+// freshness is acceptable, spending tokens is not. The cache file remains
+// served read-only. The disable persists across sessions through injected
+// wiring (this module stays GSettings-free): the caller seeds the flag
+// from the persisted `refresh-path-disabled` key via `refreshDisabled`
+// and stores trips through `onRefreshDisabled`; re-enabling is only ever
+// an explicit user action, arriving via setRefreshDisabled(false).
 
 import {defaultConfig, fetchSnapshot, refreshCache, MODEL_INVOKED} from './fetcher.js';
 
@@ -28,16 +30,27 @@ export class UsageSource {
     // by reference and read per call, so a caller may swap the argv (a
     // future preference) without rebuilding the source.
     constructor({config = defaultConfig(),
-        refreshAfterMs = DEFAULT_REFRESH_AFTER_MS} = {}) {
+        refreshAfterMs = DEFAULT_REFRESH_AFTER_MS,
+        refreshDisabled = false,
+        onRefreshDisabled = null} = {}) {
         this._config = config;
         this._refreshAfterMs = refreshAfterMs;
-        this._refreshDisabled = false;
+        this._refreshDisabled = refreshDisabled;
+        this._onRefreshDisabled = onRefreshDisabled;
         this._lastWarned = null;
     }
 
     // Whether the G1 tripwire has fired and the CLI refresh path is off.
     get refreshDisabled() {
         return this._refreshDisabled;
+    }
+
+    // Mirror of the persisted flag, driven by the caller on external
+    // changes to the settings key. false re-arms the refresh path (and
+    // the tripwire with it); RFC-001 requires that to be an explicit
+    // user action, so nothing in this module ever calls it.
+    setRefreshDisabled(value) {
+        this._refreshDisabled = value;
     }
 
     // The Scheduler-shaped fetch: always resolves to a UsageSnapshot.
@@ -71,6 +84,7 @@ export class UsageSource {
     _reportFailure(result) {
         if (result.error === MODEL_INVOKED) {
             this._refreshDisabled = true;
+            this._onRefreshDisabled?.();
             console.warn('Claudometer: refresh envelope could not prove ' +
                 'zero model cost; permanently disabling the CLI refresh ' +
                 'path (RFC-001 G1 tripwire)');

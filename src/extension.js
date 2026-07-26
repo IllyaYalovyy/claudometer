@@ -43,7 +43,15 @@ export default class ClaudometerExtension extends Extension {
         // The RFC-001 Option C source: the ~/.claude.json cache is the
         // only parse surface; the proven token-free CLI spawn only
         // refreshes it, behind the source's G1 tripwire (VISION G1).
-        this._source = new UsageSource();
+        // The tripwire's disable persists across sessions in the
+        // refresh-path-disabled key; RFC-001 allows re-enabling only by
+        // explicit user action (a gsettings write, mirrored into the
+        // source by the changed:: handler below).
+        this._source = new UsageSource({
+            refreshDisabled: this._settings.get_boolean('refresh-path-disabled'),
+            onRefreshDisabled: () =>
+                this._settings?.set_boolean('refresh-path-disabled', true),
+        });
         this._resumeAdapter = new PrepareForSleepAdapter();
         this._scheduler = new Scheduler({
             fetch: (now, opts) => this._source.fetch(now, opts),
@@ -67,6 +75,14 @@ export default class ClaudometerExtension extends Extension {
         this._settingsIds = SETTINGS_KEYS.map(key =>
             this._settings.connect(`changed::${key}`,
                 () => this._onSettingsChanged()));
+        // Not a §7 display key: mirror the persisted tripwire flag into
+        // the source. A user's `false` write re-arms the refresh path;
+        // the extension's own `true` write on a trip echoes back as a
+        // no-op (the source is already disabled).
+        this._settingsIds.push(this._settings.connect(
+            'changed::refresh-path-disabled',
+            () => this._source.setRefreshDisabled(
+                this._settings.get_boolean('refresh-path-disabled'))));
 
         // Honest pre-fetch rendering: the unavailable state, never 0%
         // (designs/UX-DESIGN.md §1); the first fetch lands right after
