@@ -253,6 +253,14 @@ test('display_options_map_the_prefs_onto_the_model_opts', () => {
     assertEquals(opts.staleAfterMs, 180000);
 });
 
+test('display_options_carry_the_system_clock_format', () => {
+    // §4.3: times honor the system 12/24-hour clock setting. clock24 is
+    // not a §7 preference — extension.js reads it from the interface
+    // settings — but it rides the same bag into both render models.
+    assertEquals(displayOptions({...DEFAULTS, clock24: false}).clock24, false);
+    assertEquals(displayOptions({...DEFAULTS, clock24: true}).clock24, true);
+});
+
 test('stale_threshold_follows_three_times_the_refresh_interval', () => {
     // §3.3 "data older than 3× poll interval": the stale boundary moves
     // with the §7 interval preference, not with the 60 s default.

@@ -51,6 +51,7 @@ export function displayOptions({
     warningPercent,
     criticalPercent,
     refreshIntervalSec,
+    clock24 = true,
 }) {
     return {
         displayMode: indicatorStyle,
@@ -58,6 +59,9 @@ export function displayOptions({
         warningAt: warningPercent,
         criticalAt: criticalPercent,
         staleAfterMs: STALE_INTERVAL_MULTIPLIER * refreshIntervalSec * 1000,
+        // §4.3: not a §7 preference — the system clock-format setting,
+        // read by extension.js and carried to both render models.
+        clock24,
     };
 }
 

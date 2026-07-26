@@ -262,6 +262,8 @@ export class ClaudometerMenu {
         const percentLabel = label(section.percentText);
         barItem.add_child(bar);
         barItem.add_child(percentLabel);
+        // §8: the bar is texture; the row reads as its number.
+        barItem.label_actor = percentLabel;
         this._menu.addMenuItem(barItem);
 
         let resetLabel = null;
@@ -276,6 +278,9 @@ export class ClaudometerMenu {
     _addTextItem(child) {
         const item = new PopupMenu.PopupBaseMenuItem({reactive: false});
         item.add_child(child);
+        // §8: rows are real menu items with proper labels — a row walked
+        // by keyboard/screen reader announces its own text.
+        item.label_actor = child;
         this._menu.addMenuItem(item);
     }
 
@@ -289,6 +294,9 @@ export class ClaudometerMenu {
         this._freshnessLabel = label('', 'claudometer-freshness');
         this._freshnessLabel.x_expand = true;
         item.add_child(this._freshnessLabel);
+        // §8: the activatable footer announces the freshness text; the
+        // button inside carries its own 'Refresh usage data' name.
+        item.label_actor = this._freshnessLabel;
 
         this._refreshIcon = new St.Icon({
             icon_name: 'view-refresh-symbolic',

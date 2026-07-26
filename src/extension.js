@@ -1,3 +1,5 @@
+import Gio from 'gi://Gio';
+
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
@@ -26,6 +28,12 @@ const SETTINGS_KEYS = [
 export default class ClaudometerExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
+        // §4.3: times honor the system 12/24-hour clock setting.
+        this._interfaceSettings = new Gio.Settings({
+            schema_id: 'org.gnome.desktop.interface',
+        });
+        this._clockFormatId = this._interfaceSettings.connect(
+            'changed::clock-format', () => this._onSettingsChanged());
         const prefs = this._readPrefs();
         this._opts = displayOptions(prefs);
 
@@ -39,6 +47,14 @@ export default class ClaudometerExtension extends Extension {
             fetch: (now, opts) => this._source.fetch(now, opts),
             onSnapshot: snapshot => this._applySnapshot(snapshot),
             baseIntervalSec: prefs.refreshIntervalSec,
+            // §6: refresh on session unlock — the first glance after
+            // coming back must not be stale. (Resume without a lock rides
+            // the next poll tick; a login1 adapter is follow-up work.)
+            wakeSources: [{
+                source: Main.screenShield,
+                signal: 'locked-changed',
+                wants: () => !Main.screenShield.locked,
+            }],
         });
         this._menu = new ClaudometerMenu(this._indicator.menu, this._scheduler);
         this._settingsIds = SETTINGS_KEYS.map(key =>
@@ -59,6 +75,11 @@ export default class ClaudometerExtension extends Extension {
             this._settings.disconnect(id);
         this._settingsIds = null;
         this._settings = null;
+        if (this._clockFormatId) {
+            this._interfaceSettings.disconnect(this._clockFormatId);
+            this._clockFormatId = null;
+        }
+        this._interfaceSettings = null;
         this._scheduler?.stop();
         this._scheduler = null;
         this._source = null;
@@ -83,6 +104,8 @@ export default class ClaudometerExtension extends Extension {
             }),
             refreshIntervalSec: normalizeRefreshInterval(
                 this._settings.get_int('refresh-interval-seconds')),
+            clock24:
+                this._interfaceSettings.get_string('clock-format') === '24h',
         };
     }
 
