@@ -123,9 +123,14 @@ tested so reruns test the same edge.
     appears/disappears/reappears; zero `JS ERROR` lines mentioning the
     UUID in the Shell log; no fetch activity while disabled (fake CLI
     run-log stays flat).
-20. **Unlock refresh.** With the extension running, emit a screen-shield
-    unlock (`Main.screenShield` `locked-changed` with `locked === false`).
-    Expect an immediate out-of-cadence fetch (§6).
+20. **Unlock / resume refresh.** With the extension running, emit a
+    screen-shield unlock (`Main.screenShield` `locked-changed` with
+    `locked === false`). Expect an immediate out-of-cadence fetch (§6).
+    For resume-without-lock, verify the login1 wake source is live
+    (`stateObj._resumeAdapter._subscriptionIds.size === 1` via Eval);
+    login1's `PrepareForSleep` cannot be spoofed on the system bus (the
+    subscription matches the name's real owner), so the false-edge fetch
+    itself needs a genuine suspend/resume when running on hardware.
 21. **Live settings.** Change `warning-percent` so the current percent
     crosses states, and `refresh-interval-seconds`. Expect re-render and
     recadence with no disable/enable (UT: the indicator changes color in

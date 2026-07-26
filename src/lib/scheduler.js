@@ -96,8 +96,8 @@ const glibTimers = {
 //   stop() disconnects. `wants(...args)` receives the signal's own args
 //   (emitter stripped) and gates the refresh — e.g. Main.screenShield
 //   {signal: 'locked-changed', wants: () => !Main.screenShield.locked},
-//   or a login1 PrepareForSleep adapter firing on resume only. The Shell/
-//   DBus objects themselves are wired up by the extension, not here.
+//   or login1.js's PrepareForSleepAdapter gated on the resume (false)
+//   edge. The Shell/DBus objects themselves are wired by the extension.
 export class Scheduler {
     constructor({
         fetch,

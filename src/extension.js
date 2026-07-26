@@ -5,6 +5,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {ClaudometerIndicator} from './indicator.js';
 import {ClaudometerMenu} from './menu.js';
+import {PrepareForSleepAdapter} from './lib/login1.js';
 import {UsageSource} from './lib/source.js';
 import {Scheduler} from './lib/scheduler.js';
 import {
@@ -43,17 +44,23 @@ export default class ClaudometerExtension extends Extension {
         // only parse surface; the proven token-free CLI spawn only
         // refreshes it, behind the source's G1 tripwire (VISION G1).
         this._source = new UsageSource();
+        this._resumeAdapter = new PrepareForSleepAdapter();
         this._scheduler = new Scheduler({
             fetch: (now, opts) => this._source.fetch(now, opts),
             onSnapshot: snapshot => this._applySnapshot(snapshot),
             baseIntervalSec: prefs.refreshIntervalSec,
-            // §6: refresh on session unlock — the first glance after
-            // coming back must not be stale. (Resume without a lock rides
-            // the next poll tick; a login1 adapter is follow-up work.)
+            // §6: refresh on session unlock and on resume from suspend —
+            // the first glance after coming back must not be stale. Both
+            // are needed: a lock-screen resume fires only the shield
+            // signal, a lockless resume only login1's false edge.
             wakeSources: [{
                 source: Main.screenShield,
                 signal: 'locked-changed',
                 wants: () => !Main.screenShield.locked,
+            }, {
+                source: this._resumeAdapter,
+                signal: 'prepare-for-sleep',
+                wants: sleeping => !sleeping,
             }],
         });
         this._menu = new ClaudometerMenu(this._indicator.menu, this._scheduler);
@@ -80,8 +87,11 @@ export default class ClaudometerExtension extends Extension {
             this._clockFormatId = null;
         }
         this._interfaceSettings = null;
+        // stop() disconnects every wake source, which for the resume
+        // adapter releases its system-bus subscription.
         this._scheduler?.stop();
         this._scheduler = null;
+        this._resumeAdapter = null;
         this._source = null;
         this._menu?.destroy();
         this._menu = null;

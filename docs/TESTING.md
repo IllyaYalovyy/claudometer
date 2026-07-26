@@ -39,7 +39,7 @@ project exists):
 | Fetch failure breaks the poll loop | Indicator freezes silently | Unit | `scheduler.test.js` (error snapshots engage backoff; rejecting fetch surfaces as unavailable, never throws into the mainloop) |
 | Raw error strings reach the menu | Unreadable UI, leaked paths | Unit | `menu_model.test.js::raw_error_strings_never_surface_in_the_menu_model` |
 | Garbage GSettings values (CLI writes) | Broken thresholds/cadence | Unit | `settings_model.test.js` normalize/cross-clamp suite, `settings_live.test.js` |
-| enable/disable leaks timers or signals | Shell degrades over sessions | Unit + manual | `scheduler.test.js` stop/lifecycle tests, SMOKE-TEST item 19 (cycle + soak) |
+| enable/disable leaks timers or signals | Shell degrades over sessions | Unit + manual | `scheduler.test.js` stop/lifecycle tests, `login1.test.js` bus-unsubscribe tests, SMOKE-TEST item 19 (cycle + soak) |
 | Widget behavior only a Shell can show (focus, keyboard, a11y names, theme) | Inaccessible or illegible UI | Manual | `docs/SMOKE-TEST.md` items 7–13, 20–28 |
 
 ## Local Quality Gate
