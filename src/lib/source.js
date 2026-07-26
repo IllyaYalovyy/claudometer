@@ -16,6 +16,15 @@
 // from the persisted `refresh-path-disabled` key via `refreshDisabled`
 // and stores trips through `onRefreshDisabled`; re-enabling is only ever
 // an explicit user action, arriving via setRefreshDisabled(false).
+//
+// Distinct from that tripwire is the #19 polite give-up: on a signed-out
+// or API-key-only setup every spawn exits healthy without ever creating
+// the cache key, so the error snapshot recurs forever. After
+// MAX_INEFFECTIVE_REFRESHES such spawns the error path stops spawning and
+// serves the file read only (VISION principle 2 — no eternal no-op
+// subprocess loop). It re-arms without persistence: a manual refresh
+// resets the counter, and a file that starts parsing again (the user
+// signed in) never consults it — only error snapshots are gated.
 
 import {defaultConfig, fetchSnapshot, refreshCache, MODEL_INVOKED} from './fetcher.js';
 
@@ -24,6 +33,10 @@ import {defaultConfig, fetchSnapshot, refreshCache, MODEL_INVOKED} from './fetch
 // apart. (Distinct from derive.js's 3× DEFAULT_STALE_AFTER_MS, which is
 // when unrefreshed data starts *looking* stale.)
 export const DEFAULT_REFRESH_AFTER_MS = 60000;
+
+// #19 polite give-up: consecutive refresh spawns that still leave the
+// file read in error before auto-spawning suspends (manual re-arms).
+export const MAX_INEFFECTIVE_REFRESHES = 3;
 
 export class UsageSource {
     // `config` is the fetcher config (filePath/refreshArgv/timeout), held
@@ -42,6 +55,7 @@ export class UsageSource {
         this._onRefreshDisabled = onRefreshDisabled;
         this._warn = warn;
         this._lastWarned = null;
+        this._ineffectiveRefreshes = 0;
     }
 
     // Whether the G1 tripwire has fired and the CLI refresh path is off.
@@ -59,6 +73,10 @@ export class UsageSource {
 
     // The Scheduler-shaped fetch: always resolves to a UsageSnapshot.
     async fetch(now, {manual = false} = {}) {
+        // Manual re-arms the give-up: the user is asking, so the auto
+        // path earns a fresh allowance of attempts too.
+        if (manual)
+            this._ineffectiveRefreshes = 0;
         const snapshot = await fetchSnapshot(this._config, now);
         if (!this._wantsRefresh(snapshot, now, manual))
             return snapshot;
@@ -71,15 +89,39 @@ export class UsageSource {
         // Re-read regardless of the spawn verdict: only the file says
         // what the data now is (the CLI may have advanced it even when
         // its envelope looked unhealthy).
-        return fetchSnapshot(this._config, now);
+        const refreshed = await fetchSnapshot(this._config, now);
+        this._countRefreshEffect(refreshed);
+        return refreshed;
     }
 
     _wantsRefresh(snapshot, now, manual) {
         if (this._refreshDisabled)
             return false;
-        if (manual || 'error' in snapshot)
+        if (manual)
             return true;
+        // Only the error path is gated by the give-up: a cache that
+        // parses again (the user signed in) spawns on staleness as
+        // normal, which is exactly the file-changed re-arm.
+        if ('error' in snapshot)
+            return this._ineffectiveRefreshes < MAX_INEFFECTIVE_REFRESHES;
         return now - snapshot.fetchedAt > this._refreshAfterMs;
+    }
+
+    // A refresh was "ineffective" when the re-read after it still yields
+    // an error snapshot — the spawn achieved nothing (the signed-out CLI
+    // exits 0 without creating the cache key). Log the give-up once per
+    // suspension, journal only (§4.5).
+    _countRefreshEffect(snapshot) {
+        if (!('error' in snapshot)) {
+            this._ineffectiveRefreshes = 0;
+            return;
+        }
+        this._ineffectiveRefreshes++;
+        if (this._ineffectiveRefreshes === MAX_INEFFECTIVE_REFRESHES) {
+            this._warn('Claudometer: refresh path suspended after ' +
+                `${MAX_INEFFECTIVE_REFRESHES} ineffective attempts; ` +
+                'manual refresh re-arms');
+        }
     }
 
     // Raw causes go to the journal, never to the UI (§4.5). Repeats of

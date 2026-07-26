@@ -8,7 +8,8 @@ import GLib from 'gi://GLib';
 
 import {test, assertEquals, runTests} from '../harness.js';
 import {NOT_AUTHENTICATED, NOT_INSTALLED} from '../../src/lib/snapshot.js';
-import {UsageSource, DEFAULT_REFRESH_AFTER_MS} from '../../src/lib/source.js';
+import {UsageSource, DEFAULT_REFRESH_AFTER_MS, MAX_INEFFECTIVE_REFRESHES}
+    from '../../src/lib/source.js';
 
 const CACHE_FIXTURE = 'tests/fixtures/cached-usage-utilization.json';
 const ENVELOPE_FIXTURE = 'tests/fixtures/claude-p-usage-result.json';
@@ -180,6 +181,85 @@ test('signed_out_cache_stays_not_authenticated_after_a_refresh', async () => {
     const snap = await source.fetch(FRESH_NOW);
     assertEquals(spawnCount(log), 1, 'the refresh was attempted');
     assertEquals(snap.error, NOT_AUTHENTICATED);
+});
+
+// A signed-out (or API-key-only) setup: the cache file never gains the
+// usage key, so every spawn is ineffective — the file read errors again.
+// #19's polite give-up caps those spawns; distinct from the G1 tripwire.
+function makeSignedOutSource(name, sourceOpts = {}) {
+    return makeSource(name, {
+        cache: '{"numStartups": 5}',
+        envelope: SIGNED_OUT_FIXTURE,
+        sourceOpts,
+    });
+}
+
+async function pollTimes(source, count, startNow) {
+    let snap = null;
+    for (let i = 0; i < count; i++)
+        snap = await source.fetch(startNow + i * 60000);
+    return snap;
+}
+
+test('signed_out_polls_stop_spawning_after_max_ineffective_refreshes', async () => {
+    // #19: every refresh on a signed-out setup exits 0 without creating
+    // the cache key, so the error snapshot recurs forever. The spawn
+    // count must plateau instead of tracking the poll count.
+    const {source, log} = makeSignedOutSource('give-up');
+    const snap = await pollTimes(source, MAX_INEFFECTIVE_REFRESHES + 4,
+        FRESH_NOW);
+    assertEquals(spawnCount(log), MAX_INEFFECTIVE_REFRESHES,
+        'spawns plateau at the give-up threshold');
+    assertEquals(snap.error, NOT_AUTHENTICATED,
+        'the file-read result is still served after the give-up');
+});
+
+test('give_up_is_journaled_once_and_names_the_manual_re_arm', async () => {
+    // The signed-out spawns themselves succeed (exit 0, zero-cost
+    // envelope), so the only warning across many polls must be the
+    // single give-up line — one line per suspension, not per tick.
+    const warnings = [];
+    const {source} = makeSignedOutSource('give-up-journal',
+        {warn: message => warnings.push(message)});
+    await pollTimes(source, MAX_INEFFECTIVE_REFRESHES + 4, FRESH_NOW);
+    assertEquals(warnings.length, 1,
+        `exactly one give-up warning, got: ${JSON.stringify(warnings)}`);
+    assertEquals(warnings[0].includes('manual refresh re-arms'), true,
+        `journal explains the re-arm, got: ${warnings[0]}`);
+});
+
+test('manual_refresh_spawns_while_suspended_and_re_arms_auto_refreshes', async () => {
+    // #19 scope 2: a manual refresh always spawns, and it resets the
+    // ineffective counter — the auto path gets a fresh allowance of
+    // attempts before suspending again.
+    const {source, log} = makeSignedOutSource('re-arm');
+    await pollTimes(source, MAX_INEFFECTIVE_REFRESHES + 2, FRESH_NOW);
+    assertEquals(spawnCount(log), MAX_INEFFECTIVE_REFRESHES,
+        'precondition: suspended');
+
+    await source.fetch(STALE_NOW, {manual: true});
+    assertEquals(spawnCount(log), MAX_INEFFECTIVE_REFRESHES + 1,
+        'manual still spawns while suspended');
+
+    await pollTimes(source, MAX_INEFFECTIVE_REFRESHES + 2, STALE_NOW + 60000);
+    assertEquals(spawnCount(log), 2 * MAX_INEFFECTIVE_REFRESHES,
+        'auto refreshes resumed after the manual re-arm, then plateaued again');
+});
+
+test('sign_in_after_give_up_re_arms_the_stale_refresh_path', async () => {
+    // #19 scope 2: the file's content changing (the user signed in; the
+    // cache key appeared) lifts the suspension — the next stale cycle
+    // spawns normally without any manual action.
+    const {source, log, filePath} = makeSignedOutSource('sign-in');
+    await pollTimes(source, MAX_INEFFECTIVE_REFRESHES + 1, FRESH_NOW);
+    assertEquals(spawnCount(log), MAX_INEFFECTIVE_REFRESHES,
+        'precondition: suspended');
+
+    GLib.file_set_contents(filePath, cacheFileText());
+    const snap = await source.fetch(STALE_NOW);
+    assertEquals(spawnCount(log), MAX_INEFFECTIVE_REFRESHES + 1,
+        'a stale-but-valid cache spawns again after sign-in');
+    assertEquals(snap.session.percent, 27, 'the signed-in data is served');
 });
 
 test('model_invoked_permanently_disables_the_refresh_path', async () => {
