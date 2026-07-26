@@ -32,9 +32,9 @@ compiles `gschemas.compiled` at install time (verified on GNOME Shell 49).
 - [ ] Install the built zip from a clean state and smoke-test it:
       `gnome-extensions uninstall claudometer@illyayalovyy.github.io`,
       `gnome-extensions install --force dist/claudometer-v<version>.shell-extension.zip`,
-      then enable in a throwaway Shell session and run the manual smoke
-      list from issue #14 (final smoke + accessibility gate) — clean
-      enable/disable, no `JS ERROR` lines for the UUID in the journal.
+      then enable in a throwaway Shell session and run
+      `docs/SMOKE-TEST.md` — clean enable/disable, no `JS ERROR` lines
+      for the UUID in the journal.
 - [ ] Verify docs (README install steps, `docs/DEVELOPING.md`) describe the
       released behavior.
 - [ ] Confirm no secrets, local paths, or agent files are staged.

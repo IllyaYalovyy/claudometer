@@ -286,10 +286,12 @@ prevents the headline from flapping between windows near-equal in usage.
 - [ ] **UX-Q2** — Per-model weekly rows: is showing more than two total
   sections ever necessary? If plans grow more windows, the menu may need a
   "show all" disclosure rather than unbounded stacking.
-- [ ] **UX-Q3** — Should the "limit hit" countdown appear in the panel even
-  in icon-only mode (temporarily overriding the mode)? Current lean: yes —
-  reset time is the one datum worth breaking the user's chosen minimalism
-  for — but verify against real usage.
+- [x] **UX-Q3** — Should the "limit hit" countdown appear in the panel even
+  in icon-only mode (temporarily overriding the mode)? **Resolved
+  2026-07-26: yes, implemented as the lean suggested** —
+  `src/lib/indicator_model.js` overrides icon-only with the countdown when
+  a reset time exists (and falls back to the honest 100% label when it
+  doesn't). Verified in the MVP smoke pass (docs/SMOKE-TEST.md item 5).
 
 ## 11. Traceability
 

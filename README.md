@@ -14,8 +14,9 @@ spending a token to check.
 - A dropdown with per-window detail — session window, weekly (all models),
   per-model weekly limits — each with a progress bar and reset time, plus a
   data-freshness footer.
-- A preferences window: panel position, what the panel shows, refresh
-  behavior.
+- A preferences window: what the panel shows, alert thresholds, and
+  refresh cadence. (Panel position is deliberately not configurable —
+  see `designs/UX-DESIGN.md` §3.2.)
 
 Claudometer reads the usage state Claude Code already keeps locally and
 never calls the Claude API or invokes the model — checking your usage never
@@ -62,12 +63,70 @@ if it fails. The artifact version comes from `version-name` in
 For the fast development loop (symlinked working tree, headless-Shell
 manual testing, reading logs), see `docs/DEVELOPING.md`.
 
+## Using Claudometer
+
+Once enabled, the gauge appears in the top panel and needs no setup: it
+polls Claude Code's local state every minute and shows the **headline
+window** — by default, whichever rate-limit window you will hit first.
+
+**What the indicator states mean:**
+
+| You see | Meaning |
+|---|---|
+| Gauge partly filled + `67%` | Normal — that much of the headline window is used |
+| `!` badge, yellow | Warning — 80% used (threshold configurable) |
+| `!` badge, red | Critical — 95% used (configurable) |
+| Hourglass + `1 h 12 m` | Limit reached — the label is the time until the window resets |
+| Dimmed gauge and number | Data is stale — the last known value, with its age explained in the dropdown |
+| Dimmed slashed outline, no number | Unavailable — usage can't be read right now (see Troubleshooting) |
+
+**Click the gauge** for detail: one section per window (session 5-hour,
+weekly all-models, per-model weekly) with a progress bar and reset time,
+plus a footer showing data freshness and a manual refresh button. The
+menu is fully keyboard-operable (arrows, Enter on the footer refreshes,
+Esc closes).
+
+**Preferences** (Extensions app → Claudometer → settings, or
+`gnome-extensions prefs claudometer@illyayalovyy.github.io`):
+
+- *Indicator style* — icon and percentage, icon only, or percentage only
+- *Headline metric* — most constrained window (default), or pin to the
+  session/weekly window
+- *Warning / Critical at* — the state thresholds (kept strictly ordered)
+- *Interval* — poll cadence, 30 s to 10 min
+
+All changes apply immediately; no re-enable needed.
+
+### Troubleshooting
+
+- **"Claude Code was not found on this system."** — Claudometer reads a
+  local Claude Code installation. Install it, run `claude` once, and hit
+  the refresh button in the dropdown.
+- **"Can't read usage data."** — Claude Code is installed but signed out
+  (or has no usage cache yet). Open `claude`, sign in, then refresh.
+  API-key-only (pay-per-token) setups show this state permanently by
+  design — there are no rate-limit windows to display.
+- **Stale (dimmed) more often than expected** — the Claude CLI throttles
+  rewrites of its local usage cache (a few minutes between updates is
+  normal). Brief stale windows on a working setup are a known cosmetic
+  issue ([#16](https://github.com/IllyaYalovyy/claudometer/issues/16)).
+- Diagnostics land in the journal, never in the menu:
+  `journalctl -f -o cat /usr/bin/gnome-shell | grep -i claudometer`.
+
+**The zero-token guarantee:** checking your usage never spends it. The
+extension only reads Claude Code's local cache; the one command it may
+run (`claude -p "/usage"`) is proven to make no model calls, and a
+runtime tripwire permanently disables that path if a future CLI version
+ever changes that.
+
 ## Status
 
 The MVP — panel gauge, dropdown, preferences, and the zero-token data
 source decided in `designs/RFC-001-usage-data-source.md` — is implemented
 and tracked to completion in the
 [MVP milestone](https://github.com/IllyaYalovyy/claudometer/milestone/1).
+Known follow-up work from the post-MVP review is tracked under the
+[`post-mvp` label](https://github.com/IllyaYalovyy/claudometer/labels/post-mvp).
 
 ## Contributing
 
