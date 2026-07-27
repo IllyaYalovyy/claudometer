@@ -159,8 +159,9 @@ export class ClaudometerMenu {
         this._openStateId = menu.connect('open-state-changed',
             (_menu, open) => {
                 if (open) {
+                    // Not a manual refresh (#23): no spinner, no give-up
+                    // re-arm — the source's own gates decide any spawn.
                     this._scheduler.maybeRefresh(OPEN_REFRESH_MAX_AGE_MS);
-                    this._syncSpinner();
                     this._startTick();
                 } else {
                     this._stopTick();

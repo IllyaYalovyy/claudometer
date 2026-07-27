@@ -88,8 +88,10 @@ const glibTimers = {
 //
 // - fetch(now, {manual}): injected async data source; resolves to a
 //   UsageSnapshot (error snapshots included). `manual` marks fetches the
-//   user initiated (refreshNow/maybeRefresh) so a source can skip its own
-//   freshness gate — RFC-001's "manual refresh always spawns".
+//   user explicitly asked for (refreshNow, the §4.4 button) so a source
+//   can skip its own freshness gate — RFC-001's "manual refresh always
+//   spawns". Ticks, wake refreshes, and the menu-open implicit refresh
+//   are not manual (#23).
 // - onSnapshot(snapshot): listener; called for every completed fetch.
 // - wakeSources: unlock/resume triggers (§6) as GObject-style entries
 //   {source, signal, wants?}. start() connects source.connect(signal, cb),
@@ -125,11 +127,11 @@ export class Scheduler {
         this._fetchedAt = null;
     }
 
-    // True from a user-initiated refresh (refreshNow/maybeRefresh) until
-    // the fetch answering it delivers its snapshot — spanning any
-    // in-flight poll fetch the manual request queued behind. The menu's
-    // refresh spinner is a view of this (§4.4): a poll snapshot or a
-    // settings re-render landing mid-request must not read as the answer.
+    // True from an explicit user refresh (refreshNow) until the fetch
+    // answering it delivers its snapshot — spanning any in-flight poll
+    // fetch the manual request queued behind. The menu's refresh spinner
+    // is a view of this (§4.4): a poll snapshot or a settings re-render
+    // landing mid-request must not read as the answer.
     get manualPending() {
         return this._manualQueued || this._manualInFlight;
     }
@@ -198,13 +200,17 @@ export class Scheduler {
         this._refreshSoon();
     }
 
-    // Menu-open refresh (§6): fetch only if the snapshot is older than
-    // maxAgeMs. Returns whether a refresh was started. User-initiated, so
-    // it resets backoff like refreshNow.
+    // Menu-open implicit refresh (§5): fetch only if the snapshot is
+    // older than maxAgeMs. Returns whether a refresh was started. NOT a
+    // manual refresh (#23): a menu open is a weaker signal of intent than
+    // the §4.4 button, so the fetch reaches the source unflagged — the
+    // source's own gates decide any spawn (and the #19 give-up stays
+    // engaged) — the backoff ladder is not reset, and manualPending never
+    // claims the spinner for it.
     maybeRefresh(maxAgeMs) {
         if (!this._running || !needsRefresh(this._fetchedAt, this._now(), maxAgeMs))
             return false;
-        this.refreshNow();
+        this._refreshSoon();
         return true;
     }
 

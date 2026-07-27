@@ -453,10 +453,12 @@ test('maybe_refresh_fires_only_past_max_age', async () => {
     scheduler.stop();
 });
 
-test('user_initiated_refreshes_are_flagged_manual_to_the_fetch', async () => {
+test('only_the_refresh_button_fetch_is_flagged_manual', async () => {
     // RFC-001: "manual refresh always spawns" — the data source needs to
     // know a fetch is user-initiated so it can skip its own freshness
-    // gate. Ticks and start-up fetches are not manual.
+    // gate. Only refreshNow (the §4.4 button) carries that intent; ticks,
+    // start-up fetches, and the menu-open implicit refresh do not (#23 —
+    // a menu open must not force a spawn or re-arm the #19 give-up).
     const {scheduler, timers, clock, manualFlags} = makeScheduler();
     scheduler.start();
     await settle();
@@ -473,7 +475,32 @@ test('user_initiated_refreshes_are_flagged_manual_to_the_fetch', async () => {
     clock.value += 20000;
     assertEquals(scheduler.maybeRefresh(15000), true);
     await settle();
-    assertEquals(manualFlags[3], true, 'menu-open refresh is manual');
+    assertEquals(manualFlags[3], false, 'menu-open refresh is not manual');
+    scheduler.stop();
+});
+
+test('menu_open_refresh_keeps_backoff_and_never_claims_the_spinner', async () => {
+    // #23: opening the menu is a weaker signal of intent than the §4.4
+    // button. Deep in backoff it still fetches immediately (the user is
+    // looking), but a still-failing fetch walks the ladder on instead of
+    // restarting it, and manualPending — the spinner's truth (#20) —
+    // never reads an implicit refresh as the user's own request.
+    const {scheduler, timers, clock, calls, setFetch} = makeScheduler();
+    setFetch(now => Promise.resolve(errorSnapshot(now)));
+    scheduler.start();
+    await settle();
+    timers.fireNext();
+    await settle();
+    assertEquals(timers.delays[0], 120, 'precondition: failure #2 rung');
+
+    clock.value += 20000;
+    assertEquals(scheduler.maybeRefresh(15000), true);
+    assertEquals(calls.length, 3, 'menu open still fetches immediately');
+    assertEquals(scheduler.manualPending, false,
+        'an implicit refresh is not the answer the spinner waits for');
+    await settle();
+    assertEquals(JSON.stringify(timers.delays), JSON.stringify([300]),
+        'the failing fetch walks on to rung 3 — the ladder was not reset');
     scheduler.stop();
 });
 

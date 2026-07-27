@@ -9,14 +9,15 @@
 import GLib from 'gi://GLib';
 
 import {test, assertEquals, runTests} from '../harness.js';
-import {NOT_INSTALLED} from '../../src/lib/snapshot.js';
-import {UsageSource} from '../../src/lib/source.js';
+import {NOT_AUTHENTICATED, NOT_INSTALLED} from '../../src/lib/snapshot.js';
+import {UsageSource, MAX_INEFFECTIVE_REFRESHES} from '../../src/lib/source.js';
 import {Scheduler} from '../../src/lib/scheduler.js';
 import {indicatorModel} from '../../src/lib/indicator_model.js';
 import {menuModel} from '../../src/lib/menu_model.js';
 
 const CACHE_FIXTURE = 'tests/fixtures/cached-usage-utilization.json';
 const ENVELOPE_FIXTURE = 'tests/fixtures/claude-p-usage-result.json';
+const SIGNED_OUT_FIXTURE = 'tests/fixtures/claude-p-usage-signed-out.json';
 const RECORD_REFRESH = 'tests/fixtures/bin/record-refresh';
 const EXIT_NONZERO = 'tests/fixtures/bin/exit-nonzero';
 
@@ -191,6 +192,81 @@ test('ut_003_walkthrough_not_installed_recover_limit_hit_go_stale', async () => 
     assertEquals(menu.footer.stale, true,
         'the line still carries the stale warning color');
 
+    scheduler.stop();
+});
+
+test('menu_open_after_give_up_neither_spawns_nor_re_arms', async () => {
+    // #23 through the real pipeline: on a signed-out setup the #19
+    // give-up has engaged — opening the menu (Scheduler.maybeRefresh)
+    // must re-read the file without spawning the CLI or resetting the
+    // ineffective counter. Only the §4.4 refresh button (refreshNow)
+    // re-arms. Spawns are counted through the record-refresh run log.
+    const filePath = tmpPath('signed-out-claude.json');
+    // A well-formed cache without the usage key: the signed-out state,
+    // which no spawn of the signed-out CLI fake ever changes.
+    GLib.file_set_contents(filePath, '{"numStartups": 5}');
+    const log = tmpPath('signed-out-runs.log');
+    const spawnCount = () => {
+        if (!GLib.file_test(log, GLib.FileTest.EXISTS))
+            return 0;
+        return readText(log).split('\n').filter(l => l === 'run').length;
+    };
+    const config = {
+        filePath,
+        refreshArgv: [RECORD_REFRESH, log, SIGNED_OUT_FIXTURE],
+        refreshTimeoutMs: 5000,
+    };
+    const source = new UsageSource({config, warn: () => {}});
+    const clock = {value: T0};
+    const timers = new FakeTimers();
+    let waiters = [];
+    const scheduler = new Scheduler({
+        fetch: (now, opts) => source.fetch(now, opts),
+        onSnapshot: s => waiters.splice(0).forEach(resolve => resolve(s)),
+        now: () => clock.value,
+        timers,
+    });
+    const nextSnapshot = () => new Promise(resolve => waiters.push(resolve));
+
+    // Poll until the give-up engages: the start fetch and the first two
+    // ticks spawn, then the error path stops spawning.
+    let delivered = nextSnapshot();
+    scheduler.start();
+    await delivered;
+    for (let i = 0; i < MAX_INEFFECTIVE_REFRESHES + 1; i++) {
+        clock.value += MIN;
+        delivered = nextSnapshot();
+        timers.fireNext();
+        await delivered;
+    }
+    assertEquals(spawnCount(), MAX_INEFFECTIVE_REFRESHES,
+        'precondition: the give-up engaged');
+
+    // The user glances at the menu, repeatedly. Each open past the 15 s
+    // age gate re-reads the file — and spawns nothing.
+    let snapshot = null;
+    for (let i = 0; i < 3; i++) {
+        clock.value += 20000;
+        delivered = nextSnapshot();
+        assertEquals(scheduler.maybeRefresh(15000), true,
+            'the implicit refresh still re-reads the file');
+        assertEquals(scheduler.manualPending, false,
+            'no spinner claim for an implicit refresh');
+        snapshot = await delivered;
+    }
+    assertEquals(snapshot.error, NOT_AUTHENTICATED,
+        'the file-read result is still served');
+    assertEquals(spawnCount(), MAX_INEFFECTIVE_REFRESHES,
+        'menu opens spawn nothing after the give-up');
+
+    // The §4.4 refresh button is the explicit re-arm: it spawns even
+    // while suspended.
+    clock.value += MIN;
+    delivered = nextSnapshot();
+    scheduler.refreshNow();
+    await delivered;
+    assertEquals(spawnCount(), MAX_INEFFECTIVE_REFRESHES + 1,
+        'the refresh button still spawns while suspended');
     scheduler.stop();
 });
 

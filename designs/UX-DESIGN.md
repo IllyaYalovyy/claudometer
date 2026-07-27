@@ -221,7 +221,11 @@ the first line: `Session limit reached — resets in 1 h 12 m (17:00)`.
 
 Opening the menu triggers an implicit refresh if the snapshot is older than
 15 seconds, so the detail view is near-live without aggressive background
-polling.
+polling. This implicit refresh is not a manual refresh (#23): the fetch
+reaches the data source unflagged, so the source's own freshness and
+give-up gates decide whether the CLI is spawned, the §6 failure backoff is
+not reset, and the §4.4 refresh spinner does not run for it. Only the §4.4
+refresh button carries explicit refresh intent.
 
 ## 6. Refresh policy (UX-visible aspects)
 

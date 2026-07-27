@@ -92,9 +92,12 @@ tested so reruns test the same edge.
       only then hand back the icon. Likewise a background poll snapshot
       landing mid-request must not stop it early.
 12. **Menu-open implicit refresh.** With a snapshot older than 15 s,
-    opening the menu triggers a fetch (footer resets) and the refresh
-    button spins until that fetch lands; reopening within 15 s does
-    neither.
+    opening the menu triggers a fetch (the footer updates when it lands);
+    reopening within 15 s does not. The refresh button must **not** spin —
+    the spinner is reserved for the explicit button refresh (#23). On a
+    signed-out setup with the #19 give-up engaged, repeated menu opens
+    spawn no `claude` processes (watch the journal / `pgrep`); the refresh
+    button still spawns and re-arms.
 13. **Dismiss.** Esc and clicking outside both close the menu; the panel
     returns to the ambient indicator; the displayed state is unchanged by
     an open/close cycle (no background state change).
