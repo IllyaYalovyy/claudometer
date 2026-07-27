@@ -1,7 +1,7 @@
 # Claudometer — UX Design
 
-Status: Draft (pending RFC-001 answers for data availability; see "Data
-contract" below)
+Status: Implemented (RFC-001 ratified Implemented 2026-07-26; verified
+against this design by the MVP smoke pass, `docs/SMOKE-TEST.md`)
 
 This document defines the user-facing design of the Claudometer GNOME Shell
 extension: what appears in the panel, what appears in the dropdown, every
