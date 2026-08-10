@@ -33,7 +33,9 @@ project exists):
 | Risk / failure mode | User impact | Test layer | Coverage |
 |---|---|---|---|
 | A refresh spends Claude tokens (G1) | The meter costs what it measures | Unit + gate | `fetcher.test.js` zero-cost envelope assertions, `source.test.js::model_invoked_permanently_disables_the_refresh_path` plus its persisted-flag suite (`persisted_disable_holds_from_the_first_fetch`, `explicit_re_enable_re_arms_the_refresh_path_and_the_tripwire`), `scripts/quality.d/50-fixtures` invariants every gate run |
-| CLI cache schema drift | Wrong or fabricated numbers | Unit | `snapshot.test.js` strict-parse taxonomy (wrong-typed field ⇒ whole payload UNPARSEABLE, never coerced) |
+| Provider schema drift | Wrong or fabricated numbers | Unit | `snapshot.test.js` for Claude; `codex_snapshot.test.js` for App Server multi-bucket/fallback parsing (wrong-typed consumed field ⇒ whole provider snapshot unparseable) |
+| Codex App Server hangs, exits, or leaks a child | Shell resources degrade; Codex freezes | Unit/integration | `codex_fetcher.test.js` success, absent binary, garbage, early EOF, timeout, and process-reaping cases |
+| One provider failure hides the other | Healthy usage disappears | Unit | `multi_source.test.js`, composite cases in `indicator_model.test.js` and `menu_model.test.js` |
 | Missing/unreadable/signed-out data shown as `0%` | Honesty failure (UX §1) | Unit + manual | `indicator_model.test.js::unavailable_shows_no_number_anywhere_in_any_mode`, `menu_model.test.js` §4.5 notices, SMOKE-TEST items 14–16 |
 | Stale data presented as current | User trusts an hour-old number | Unit + manual | `derive.test.js` stale precedence, `indicator_model.test.js` dimming/qualifier, SMOKE-TEST item 17 |
 | Fetch failure breaks the poll loop | Indicator freezes silently | Unit | `scheduler.test.js` (error snapshots engage backoff; rejecting fetch surfaces as unavailable, never throws into the mainloop) |

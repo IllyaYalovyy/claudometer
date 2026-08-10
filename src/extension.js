@@ -7,6 +7,8 @@ import {ClaudometerIndicator} from './indicator.js';
 import {ClaudometerMenu} from './menu.js';
 import {PrepareForSleepAdapter} from './lib/login1.js';
 import {UsageSource} from './lib/source.js';
+import {CodexUsageSource} from './lib/codex_source.js';
+import {MultiUsageSource} from './lib/multi_source.js';
 import {Scheduler} from './lib/scheduler.js';
 import {
     displayOptions,
@@ -47,10 +49,15 @@ export default class ClaudometerExtension extends Extension {
         // refresh-path-disabled key; RFC-001 allows re-enabling only by
         // explicit user action (a gsettings write, mirrored into the
         // source by the changed:: handler below).
-        this._source = new UsageSource({
+        this._claudeSource = new UsageSource({
             refreshDisabled: this._settings.get_boolean('refresh-path-disabled'),
             onRefreshDisabled: () =>
                 this._settings?.set_boolean('refresh-path-disabled', true),
+        });
+        this._codexSource = new CodexUsageSource();
+        this._source = new MultiUsageSource({
+            claude: this._claudeSource,
+            codex: this._codexSource,
         });
         this._resumeAdapter = new PrepareForSleepAdapter();
         this._scheduler = new Scheduler({
@@ -81,13 +88,13 @@ export default class ClaudometerExtension extends Extension {
         // no-op (the source is already disabled).
         this._settingsIds.push(this._settings.connect(
             'changed::refresh-path-disabled',
-            () => this._source.setRefreshDisabled(
+            () => this._claudeSource.setRefreshDisabled(
                 this._settings.get_boolean('refresh-path-disabled'))));
 
         // Honest pre-fetch rendering: the unavailable state, never 0%
         // (designs/UX-DESIGN.md §1); the first fetch lands right after
         // start().
-        this._applySnapshot(null);
+        this._applySnapshot({providers: {claude: null, codex: null}});
         // §3.2: right box, before the quick-settings aggregate.
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
         this._scheduler.start();
@@ -109,6 +116,8 @@ export default class ClaudometerExtension extends Extension {
         this._scheduler = null;
         this._resumeAdapter = null;
         this._source = null;
+        this._claudeSource = null;
+        this._codexSource = null;
         this._menu?.destroy();
         this._menu = null;
         this._indicator?.destroy();
@@ -142,7 +151,8 @@ export default class ClaudometerExtension extends Extension {
         const prefs = this._readPrefs();
         this._opts = displayOptions(prefs);
         this._scheduler.setBaseInterval(prefs.refreshIntervalSec);
-        this._applySnapshot(this._scheduler.snapshot);
+        this._applySnapshot(this._scheduler.snapshot ??
+            {providers: {claude: null, codex: null}});
     }
 
     _applySnapshot(snapshot) {
@@ -152,6 +162,8 @@ export default class ClaudometerExtension extends Extension {
         const opts = {
             ...this._opts,
             lastRefreshFailed: this._source.lastRefreshFailed,
+            lastRefreshFailedByProvider:
+                this._source.lastRefreshFailedByProvider,
         };
         this._indicator.update(snapshot, now, opts);
         this._menu.update(snapshot, now, opts);

@@ -1,13 +1,12 @@
 # Claudometer — UX Design
 
-Status: Implemented (RFC-001 ratified Implemented 2026-07-26; verified
-against this design by the MVP smoke pass, `docs/SMOKE-TEST.md`)
+Status: Implemented (RFC-001 MVP; amended by accepted RFC-002 on 2026-08-09)
 
 This document defines the user-facing design of the Claudometer GNOME Shell
 extension: what appears in the panel, what appears in the dropdown, every
 visual state, and the interaction and accessibility rules. It deliberately
-does not decide *where the data comes from* — that is
-`RFC-001-usage-data-source.md`. Instead it defines a **display contract**:
+does not decide *where the data comes from* — those decisions are RFC-001 and
+RFC-002. Instead it defines a **display contract**:
 which fields the UI wants, and how the UI degrades when a field is missing.
 
 **Scope (ratified 2026-07-24): subscription plans only.** The design is
@@ -32,8 +31,8 @@ the *unavailable* state, not as a degraded percentage view.
 
 ## 2. The data model the UI consumes
 
-The UI consumes a `UsageSnapshot` with this shape (fields optional unless
-marked required):
+The UI consumes a combined snapshot with independent `providers.claude` and
+`providers.codex` values. Claude retains the original `UsageSnapshot` shape:
 
 | Field | Required | Meaning |
 |---|---|---|
@@ -45,10 +44,14 @@ marked required):
 | `weekModel[]` | no | Per-model weekly entries (e.g. Opus), same shape |
 | `error` | no | Machine-readable reason the source failed |
 
-Derived value used everywhere: **`constraint` = the window with the highest
-`percent`** — the limit the user will hit first. This is the headline number.
-If only one window is present, it is the constraint. If none are present,
-the snapshot is *unavailable*.
+Codex carries `fetchedAt`, `error?`, and `windows[]`. Each Codex window has a
+stable `limitId`, optional user-facing `limitName`, `percent`, `durationMins`,
+`resetsAt`, and a `primary`/`secondary` slot.
+
+Derived independently per provider: **`constraint` = the provider window with
+the highest `percent`** — the limit the user will hit first. If only one
+window is present, it is the constraint. If none are present, only that
+provider is *unavailable*; the other provider remains usable.
 
 Rationale: users do not want to arbitrate between windows at a glance. The
 battery indicator does not show per-cell voltages; it shows the number that
@@ -60,22 +63,19 @@ determines when you stop working.
 
 ```
 ┌─────────────────────────────┐
-│  ◔ 67%                      │   icon (16px symbolic) + optional label
+│  ✣ ▮     </> ▮              │   provider symbol + vertical used meter
 └─────────────────────────────┘
 ```
 
-- **Icon:** a custom symbolic icon (`claudometer-symbolic.svg`), drawn as a
-  simple circular meter/gauge that fills clockwise with usage — quarter
-  filled at 25%, three-quarters at 75%. Monochrome, inherits panel
-  foreground color, follows the `-symbolic` naming and recoloring rules.
-  Deliberately *not* an Anthropic/Claude logo: trademark risk, and logos
-  read as launchers, not meters.
-- **Label:** the constraint percentage, e.g. `67%`. Follows the panel font;
-  never bold, never colored independently of the icon.
-- **Display modes** (preference, see §7): icon+percent (default),
-  icon-only, percent-only. Icon-only exists because horizontal panel space
-  is contested; percent-only exists for users who find duplicate encoding
-  redundant.
+- **Provider symbols:** original Cairo geometry, not vendor artwork. Claude
+  uses an eight-ray spark (assistant/insight); Codex uses generic source-code
+  brackets with a slash. Both inherit panel foreground color.
+- **Meters:** one narrow 6×18 px vertical track beside each 18 px symbol,
+  filled from bottom to the provider constraint's percent used. Normal fill
+  uses GNOME blue; warning/error use the configured state colors.
+- **Fixed representation:** no panel percentage label and no display-mode or
+  headline pin. The repeated compact units make the providers directly
+  comparable and match the supplied visual reference.
 
 ### 3.2 Placement
 
@@ -88,27 +88,23 @@ extensions the user may already have.
 
 ### 3.3 Indicator states
 
-| State | Trigger | Icon | Label | Color |
-|---|---|---|---|---|
-| Normal | constraint < 80% | meter, filled to % | `67%` | theme foreground |
-| Warning | 80% ≤ constraint < 95% | meter + small `!` overlay | `84%` | theme warning (fallback `#f5c211`) |
-| Critical | constraint ≥ 95% | meter + `!` overlay | `97%` | theme error (fallback `#c01c28`) |
-| Limit hit | constraint ≥ 100% | hourglass glyph | time to reset, `1h 12m` | theme error |
-| Stale | data older than 3× poll interval | current meter at 55% opacity | last % at 55% opacity | inherited |
-| Unavailable | no usable data | meter outline with a slash | *(none)* | 55% opacity foreground |
+| State | Trigger | Symbol/meter | Color |
+|---|---|---|---|
+| Normal | constraint < 80% | neutral symbol + fill to % | GNOME blue (`#3584e4`) |
+| Warning | 80% ≤ constraint < 95% | same fill geometry | warning (`#f5c211`) |
+| Critical | constraint ≥ 95% | same fill geometry | error (`#c01c28`) |
+| Limit hit | constraint ≥ 100% | full meter | error |
+| Stale | provider data older than 3× poll interval | last fill, whole pair at 55% opacity | retains threshold color |
+| Unavailable | provider has no usable data | empty meter with slash, whole pair at 55% | foreground |
 
 Notes:
 
-- Warning/critical thresholds are preferences (defaults 80/95). The `!`
-  overlay — not just color — is what distinguishes warning from normal.
-- **Limit hit swaps the label's meaning from "how much used" to "when am I
-  back."** Once at 100%, the percentage is dead information; the only thing
-  the user wants is the countdown. The hourglass glyph signals the semantic
-  change so `1h 12m` is not misread as a percentage.
+- Warning/critical thresholds are preferences (defaults 80/95). Exact
+  percentages and reset times remain in the dropdown and accessible name.
 - Stale keeps showing the last value (dimmed) rather than hiding it: an
   hour-old 40% is still more useful than nothing, as long as it is visibly
   not-fresh. The menu states the exact age (§4.4).
-- Unavailable shows no number at all. Showing `0%` here would be the single
+- Unavailable draws no fill. Showing `0%` here would be the single
   worst honesty failure this design can commit.
 - No animation in any state. No pulsing at critical. The panel is ambient;
   a user at 97% who has not clicked does not want to be nagged, and GNOME
@@ -124,25 +120,35 @@ behavior for free.
 
 ```
 ┌──────────────────────────────────────────┐
-│  Session (5-hour window)                 │
+│  Claude — Session (5-hour window)        │
 │  ████████████████░░░░░░░░  67%           │
 │  Resets in 2 h 15 m  (17:00)             │
 │  ──────────────────────────────────────  │
-│  Week — all models                       │
+│  Claude — Week (all models)              │
 │  ██████████░░░░░░░░░░░░░░  42%           │
 │  Resets Tue, Jul 28                      │
 │  ──────────────────────────────────────  │
-│  Week — Opus                             │
+│  Claude · Opus — Week                    │
 │  ████░░░░░░░░░░░░░░░░░░░░  18%           │
 │  Resets Tue, Jul 28                      │
 │  ──────────────────────────────────────  │
-│  Updated 2 min ago              ⟳        │
+│  Codex — 5-hour window                   │
+│  ██████░░░░░░░░░░░░░░░░░░  25%           │
+│  Resets in 2 h 15 m (17:00)              │
+│  ──────────────────────────────────────  │
+│  Codex · Spark — 7-day window            │
+│  ████░░░░░░░░░░░░░░░░░░░░  18%           │
+│  Resets Tue, Jul 28                      │
+│  ──────────────────────────────────────  │
+│  Claude 2 min ago · Codex just now  ⟳    │
 └──────────────────────────────────────────┘
 ```
 
-Each window is a section: **title row, progress bar with percentage,
-reset row.** Sections appear only if their data exists in the snapshot —
-no empty placeholders for windows the user's plan doesn't have.
+Each window is a section: **provider-prefixed title row, progress bar with
+percentage, reset row.** Codex's optional `limitName` distinguishes
+model-specific buckets. Sections appear only for real windows. If their
+natural height exceeds the stage, the content scrolls within a height-capped
+viewport so every row and the refresh footer remain reachable.
 
 ### 4.2 Progress bars
 
@@ -165,7 +171,8 @@ no empty placeholders for windows the user's plan doesn't have.
 
 ### 4.4 Footer row
 
-- Left: freshness — `Updated 2 min ago`, or `Updated just now` under 30s.
+- Left: independent freshness — for example
+  `Claude updated 2 min ago · Codex updated just now`.
   In the stale state this line carries the warning color and the icon's
   dimming is explained by the honest age: `Data is 25 min old`. The
   `— last refresh failed` clause is appended only when the last refresh
@@ -182,20 +189,20 @@ no empty placeholders for windows the user's plan doesn't have.
 
 ### 4.5 Menu in degraded states
 
-**Unavailable — Claude Code not found:**
+Provider failures are independent. If Codex is absent, Claude rows still
+render, followed by a notice such as:
 
 ```
-│  Claude Code was not found on this      │
-│  system.                                │
-│  Claudometer reads usage from a local   │
-│  Claude Code installation.              │
+│  Codex was not found on this system.    │
+│  Install Codex, then refresh.           │
 ```
 
-**Unavailable — data unreadable / not authenticated:**
+If both providers are unavailable, the notice names both. Unreadable or
+signed-out providers use the same plain-language action pattern:
 
 ```
-│  Can't read usage data.                 │
-│  Open Claude Code and sign in, then     │
+│  Can't read Codex usage data.           │
+│  Open Codex and sign in, then           │
 │  refresh.                               │
 │  ──────────────────────────────────    │
 │  Last tried 1 min ago            ⟳     │
@@ -241,12 +248,8 @@ refresh button carries explicit refresh intent.
 
 ## 7. Preferences (GTK4/libadwaita window)
 
-One page, three groups. Every preference must earn its place; defaults are
+One page, two groups. Every preference must earn its place; defaults are
 chosen so most users never open this window.
-
-**Display**
-- Indicator style: Icon and percentage (default) / Icon only / Percentage only
-- Headline metric: Most constrained (default) / Session window / Weekly
 
 **Thresholds**
 - Warning at: 80% (spin, 50–95)
@@ -255,22 +258,20 @@ chosen so most users never open this window.
 **Refresh**
 - Interval: 1 min (default; 30 s / 1 min / 2 min / 5 min / 10 min)
 
-"Headline metric" exists for the user who is on an effectively unlimited
-weekly plan and only cares about the session window (or vice versa); pinning
-prevents the headline from flapping between windows near-equal in usage.
+The legacy display/headline keys remain in GSettings only for upgrade
+compatibility; RFC-002's panel representation is fixed and does not read them.
 
 ## 8. Accessibility
 
-- Indicator `accessible-name` carries the full story the icon tells:
-  "Claude usage: 67 percent of session limit used, resets at 5:00 PM" —
-  updated on every snapshot, including state qualifiers ("data is 25
-  minutes old", "usage data unavailable").
+- Indicator `accessible-name` carries both provider stories, for example
+  "Claude usage: 67 percent used, resets …; Codex usage: 42 percent used,
+  resets …". Provider failure and stale qualifiers are independent.
 - Menu rows are real menu items with proper labels; progress bars expose
   their value via the accompanying text, not as unlabeled drawings.
 - All colors come from the shell theme with sufficient-contrast fallbacks;
   the design is fully legible in pure monochrome (state = shape + text).
-- Honors large-text/text-scaling settings; the label uses the panel's font
-  size, never a hardcoded one.
+- Honors large-text/text-scaling settings; menu text uses the Shell font and
+  the compact geometric panel marks remain crisp at HiDPI scale factors.
 
 ## 9. Anti-goals (things this design refuses to do)
 
@@ -299,12 +300,14 @@ prevents the headline from flapping between windows near-equal in usage.
   2026-07-26: yes, implemented as the lean suggested** —
   `src/lib/indicator_model.js` overrides icon-only with the countdown when
   a reset time exists (and falls back to the honest 100% label when it
-  doesn't). Verified in the MVP smoke pass (docs/SMOKE-TEST.md item 5).
+  doesn't). Verified in the MVP smoke pass; superseded by RFC-002's fixed
+  full vertical meter, with the reset time retained in the dropdown and
+  accessible name.
 
 ## 11. Traceability
 
 | User task | Sections |
 |---|---|
-| UT-001 (glance) | §3 indicator, §2 constraint derivation |
+| UT-001 (glance) | §3 per-provider indicators, §2 constraint derivation |
 | UT-002 (detail on demand) | §4 dropdown, §5 interaction |
 | UT-003 (unavailable state) | §3.3, §4.5 |

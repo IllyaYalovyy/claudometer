@@ -258,4 +258,56 @@ test('accessible_name_honors_the_12_hour_clock_option', () => {
         'resets in 1 h 12 m (5:00 PM)');
 });
 
+test('multi_provider_panel_has_one_fixed_symbol_meter_item_per_provider', () => {
+    const snapshot = {providers: {
+        claude: {
+            fetchedAt: NOW,
+            session: {percent: 67, resetsAt: RESET},
+            week: {percent: 42, resetsAt: RESET},
+        },
+        codex: {fetchedAt: NOW, windows: [{
+            limitId: 'codex', slot: 'primary', percent: 84,
+            durationMins: 300, resetsAt: RESET,
+        }]},
+    }};
+    const m = model(snapshot, {displayMode: PERCENT_ONLY,
+        headlineMetric: 'session'});
+    assertEquals(m.items.length, 2);
+    assertEquals(m.items[0].id, 'claude');
+    assertEquals(m.items[0].symbol, 'spark');
+    assertEquals(m.items[0].percent, 67);
+    assertEquals(m.items[1].id, 'codex');
+    assertEquals(m.items[1].symbol, 'code');
+    assertEquals(m.items[1].percent, 84);
+    assertEquals(m.items[1].state, 'warning');
+    assertEquals(m.items[1].meterState, 'warning');
+    assertEquals(m.accessibleName.includes('Claude usage: 67 percent used'), true);
+    assertEquals(m.accessibleName.includes('Codex usage: 84 percent used'), true);
+});
+
+test('stale_provider_dims_but_keeps_the_underlying_threshold_meter_color', () => {
+    const m = model({providers: {
+        claude: {fetchedAt: NOW - 10 * MIN, session: {percent: 100}},
+        codex: {fetchedAt: NOW, windows: [{
+            limitId: 'codex', slot: 'primary', percent: 20,
+            durationMins: 300, resetsAt: RESET,
+        }]},
+    }});
+    assertEquals(m.items[0].state, 'stale');
+    assertEquals(m.items[0].meterState, 'limit-hit');
+    assertEquals(m.items[0].opacity, 0.55);
+});
+
+test('multi_provider_failure_is_independent_and_never_fabricates_fill', () => {
+    const m = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 40}},
+        codex: {fetchedAt: NOW, error: 'not-installed'},
+    }});
+    assertEquals(m.items[0].percent, 40);
+    assertEquals(m.items[0].state, 'normal');
+    assertEquals(m.items[1].percent, null);
+    assertEquals(m.items[1].state, 'unavailable');
+    assertEquals(m.items[1].accessibleName, 'Codex usage data unavailable');
+});
+
 runTests();

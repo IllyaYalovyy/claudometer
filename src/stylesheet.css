@@ -45,3 +45,28 @@
 .claudometer-notice {
     max-width: 320px;
 }
+
+/* RFC-002 panel: repeated neutral-symbol + vertical-used-meter pairs. The
+ * provider marks inherit the panel foreground; only the meter carries state
+ * color, so the symbols stay quiet and non-branded. */
+
+.claudometer-provider-list {
+    spacing: 10px;
+}
+
+.claudometer-provider-item {
+    spacing: 3px;
+}
+
+.claudometer-provider-meter {
+    color: #3584e4;
+}
+
+.claudometer-provider-meter-warning {
+    color: #f5c211;
+}
+
+.claudometer-provider-meter-critical,
+.claudometer-provider-meter-limit-hit {
+    color: #c01c28;
+}

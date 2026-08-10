@@ -1,31 +1,29 @@
 # Claudometer
 
-A GNOME Shell extension that shows your Claude Code usage in the top panel
-— how close you are to the session and weekly rate limits — without ever
-spending a token to check.
-
-![Claudometer's panel gauge and dropdown](docs/screenshot.png)
+A GNOME Shell extension that shows Claude Code and Codex usage in the top
+panel — how close each provider is to its current rate limits — without ever
+starting a model turn to check.
 
 ## What it shows
 
-- A small clockwise-fill gauge in the top panel showing the **constraint**:
-  the rate-limit window (5-hour session or weekly) you will hit first, with
-  optional percent text next to it.
-- A dropdown with per-window detail — session window, weekly (all models),
-  per-model weekly limits — each with a progress bar and reset time, plus a
-  data-freshness footer.
-- A preferences window: what the panel shows, alert thresholds, and
-  refresh cadence. (Panel position is deliberately not configurable —
-  see `designs/UX-DESIGN.md` §3.2.)
+- Two compact symbol-and-meter pairs in the top panel: an original spark for
+  Claude and generic code brackets for Codex. Each vertical meter shows the
+  provider's most constrained window.
+- A dropdown with every Claude and Codex window, including model-specific
+  buckets, with progress bars, reset times, and per-provider freshness.
+- A preferences window for alert thresholds and refresh cadence. Panel
+  position and the compact representation are deliberately fixed.
 
-Claudometer reads the usage state Claude Code already keeps locally and
-never calls the Claude API or invokes the model — checking your usage never
-consumes your usage. That guarantee is the point of the project; see
-`VISION.md` and `designs/RFC-001-usage-data-source.md` for how it is kept.
+Claudometer reads Claude Code's local usage state and asks the documented
+Codex App Server account endpoint for Codex quota metadata. It never starts a
+Claude or Codex model turn. See `VISION.md`,
+`designs/RFC-001-usage-data-source.md`, and
+`designs/RFC-002-multi-provider-usage.md` for the boundaries.
 
-Requirements: GNOME Shell 49, Claude Code installed and logged in with a
-subscription plan. API-key-only (pay-per-token) setups have no rate-limit
-windows and render as an explicit "unavailable" state by design.
+Requirements: GNOME Shell 49 and at least one locally installed provider
+client. Claude Code and Codex are detected independently; a missing or signed
+out provider is explicitly unavailable while the other keeps working.
+API-key-only setups without subscription windows remain out of scope.
 
 ## Install
 
@@ -65,33 +63,29 @@ manual testing, reading logs), see `docs/DEVELOPING.md`.
 
 ## Using Claudometer
 
-Once enabled, the gauge appears in the top panel and needs no setup: it
-polls Claude Code's local state every minute and shows the **headline
-window** — by default, whichever rate-limit window you will hit first.
+Once enabled, the two compact meters appear in the top panel and need no
+setup. Claudometer polls each installed provider every minute; each meter
+shows whichever of that provider's rate-limit windows has the highest usage.
 
 **What the indicator states mean:**
 
 | You see | Meaning |
 |---|---|
-| Gauge partly filled + `67%` | Normal — that much of the headline window is used |
-| `!` badge, yellow | Warning — 80% used (threshold configurable) |
-| `!` badge, red | Critical — 95% used (configurable) |
-| Hourglass + `1 h 12 m` | Limit reached — the label is the time until the window resets |
-| Dimmed gauge and number | Data is stale — the last known value, with its age explained in the dropdown |
-| Dimmed slashed outline, no number | Unavailable — usage can't be read right now (see Troubleshooting) |
+| Blue vertical fill | Normal — the fill is the provider's highest percent used |
+| Yellow fill | Warning — 80% used (threshold configurable) |
+| Red fill | Critical or limit reached — 95% or more used |
+| Dimmed symbol and meter | That provider's last known data is stale |
+| Dimmed slashed empty meter | That provider is unavailable; the other remains independent |
 
-**Click the gauge** for detail: one section per window (session 5-hour,
-weekly all-models, per-model weekly) with a progress bar and reset time,
-plus a footer showing data freshness and a manual refresh button. The
+**Click the meters** for detail: one section per Claude or Codex window
+with a progress bar and reset time, plus a footer showing freshness for both
+providers and a manual refresh button. The
 menu is fully keyboard-operable (arrows, Enter on the footer refreshes,
 Esc closes).
 
 **Preferences** (Extensions app → Claudometer → settings, or
 `gnome-extensions prefs claudometer@illyayalovyy.github.io`):
 
-- *Indicator style* — icon and percentage, icon only, or percentage only
-- *Headline metric* — most constrained window (default), or pin to the
-  session/weekly window
 - *Warning / Critical at* — the state thresholds (kept strictly ordered)
 - *Interval* — poll cadence, 30 s to 10 min
 
@@ -106,6 +100,9 @@ All changes apply immediately; no re-enable needed.
   (or has no usage cache yet). Open `claude`, sign in, then refresh.
   API-key-only (pay-per-token) setups show this state permanently by
   design — there are no rate-limit windows to display.
+- **"Codex was not found on this system."** — Install the Codex CLI and hit
+  refresh. If it is installed but unavailable, open Codex, sign in with your
+  ChatGPT account, then refresh.
 - **Stale (dimmed) more often than expected** — the Claude CLI throttles
   rewrites of its local usage cache (a few minutes between updates is
   normal). Brief stale windows on a working setup are a known cosmetic
@@ -124,18 +121,19 @@ All changes apply immediately; no re-enable needed.
 - Diagnostics land in the journal, never in the menu:
   `journalctl -f -o cat /usr/bin/gnome-shell | grep -i claudometer`.
 
-**The zero-token guarantee:** checking your usage never spends it. The
-extension only reads Claude Code's local cache; the one command it may
-run (`claude -p "/usage"`) is proven to make no model calls, and a
-runtime tripwire permanently disables that path — persistently, until
-you explicitly re-enable it — if a future CLI version ever changes that.
+**The no-model-turn guarantee:** checking usage never starts a model turn.
+The Claude path reads a local cache; its optional `claude -p "/usage"`
+refresh is guarded by the existing zero-token tripwire. The Codex path starts
+`codex app-server` only long enough to call the documented read-only
+`account/rateLimits/read` method; it never starts a thread or turn.
 
 ## Status
 
-The MVP — panel gauge, dropdown, preferences, and the zero-token data
-source decided in `designs/RFC-001-usage-data-source.md` — is implemented
-and tracked to completion in the
-[MVP milestone](https://github.com/IllyaYalovyy/claudometer/milestone/1).
+The MVP plus RFC-002's Claude/Codex panel meters and multi-provider dropdown
+are implemented. The data sources are decided in
+`designs/RFC-001-usage-data-source.md` and
+`designs/RFC-002-multi-provider-usage.md`. The original MVP work is tracked
+in the [MVP milestone](https://github.com/IllyaYalovyy/claudometer/milestone/1).
 Known follow-up work from the post-MVP review is tracked under the
 [`post-mvp` label](https://github.com/IllyaYalovyy/claudometer/labels/post-mvp).
 
@@ -170,6 +168,7 @@ The default workflow is intentionally simple:
 ├── VISION.md                    # Problem, approach, and what this is not
 ├── designs/
 │   ├── RFC-001-usage-data-source.md  # Decided: zero-token data source
+│   ├── RFC-002-multi-provider-usage.md # Claude + Codex source/UI design
 │   ├── UX-DESIGN.md             # Panel indicator + dropdown UX design
 │   └── USER-TASKS.md            # User workflow inventory
 ├── docs/

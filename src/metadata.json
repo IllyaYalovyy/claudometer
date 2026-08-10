@@ -1,7 +1,7 @@
 {
     "uuid": "claudometer@illyayalovyy.github.io",
     "name": "Claudometer",
-    "description": "Claude Code usage in the top panel, without spending tokens to check it.",
+    "description": "Claude Code and Codex usage limits in the top panel, without starting model turns to check.",
     "shell-version": ["49"],
     "version-name": "0.1.0",
     "url": "https://github.com/IllyaYalovyy/claudometer",
