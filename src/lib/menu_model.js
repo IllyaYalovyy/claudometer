@@ -14,10 +14,12 @@
 //               comes from a fixed table keyed on the failure taxonomy;
 //               a raw error string can never reach the menu (raw causes
 //               go to console.warn/the journal in the IO layers).
-//   sections[]  one entry per window present in the snapshot, in the §4.1
-//               order session, week-all-models, per-model weeks; absent
-//               windows produce nothing (no empty placeholders):
+//   groups[]    optional provider groups for a composite snapshot. Provider
+//               names/icons live here once, never in every window title.
+//   sections[]  flattened compatibility view of the grouped windows, in
+//               Claude then Codex order; absent windows produce nothing:
 //     kind         'session' | 'week' | 'weekModel' (derive.js vocabulary)
+//     providerName composite-only provider context for accessibility
 //     title        §4.1 section title row text
 //     percent      raw fill datum for the §4.2 bar (0–100)
 //     percentText  the §4.2 accompanying number, e.g. '67%'
@@ -48,11 +50,22 @@ import {
 } from './derive.js';
 import {NOT_INSTALLED} from './snapshot.js';
 import {
+    formatAge,
     formatFreshness,
     formatLastTried,
     formatPercent,
     formatResetRow,
 } from './format.js';
+
+const MAX_DYNAMIC_LABEL_CHARS = 24;
+const MINUTE_MS = 60000;
+
+function boundedLabel(value) {
+    const chars = Array.from(value);
+    if (chars.length <= MAX_DYNAMIC_LABEL_CHARS)
+        return value;
+    return `${chars.slice(0, MAX_DYNAMIC_LABEL_CHARS - 1).join('')}…`;
+}
 
 // §4.1 titles. The em dash is the mockup's, not a hyphen.
 function sectionTitle(kind, model) {
@@ -124,21 +137,23 @@ function promotedLine(constraint, now, clock24) {
 function durationLabel(minutes) {
     if (minutes % 1440 === 0) {
         const days = minutes / 1440;
-        return `${days}-day window`;
+        return `${days} ${days === 1 ? 'day' : 'days'}`;
     }
     if (minutes % 60 === 0) {
         const hours = minutes / 60;
-        return `${hours}-hour window`;
+        return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     }
-    return `${minutes}-minute window`;
+    return `${minutes} min`;
 }
 
 function codexSection(window, index, now, opts) {
-    const label = window.limitName ?? 'Codex';
+    const windowName = window.limitName == null
+        ? 'General'
+        : boundedLabel(window.limitName);
     return {
         kind: `codex:${window.limitId}:${window.slot}:${index}`,
-        title: `Codex${label === 'Codex' ? '' : ` · ${label}`} — ` +
-            durationLabel(window.durationMins),
+        providerName: 'Codex',
+        title: `${windowName} · ${durationLabel(window.durationMins)}`,
         percent: window.percent,
         percentText: formatPercent(window.percent),
         barState: barState(window.percent, opts.warningAt, opts.criticalAt),
@@ -166,11 +181,14 @@ function freshnessPart(id, snapshot, now, opts, usable) {
     const name = id === 'claude' ? 'Claude' : 'Codex';
     if (!usable || typeof snapshot?.fetchedAt !== 'number')
         return `${name} unavailable`;
-    const text = formatFreshness(snapshot.fetchedAt, now, {
-        staleAfterMs: opts.staleAfterMs,
-        lastRefreshFailed: opts.lastRefreshFailedByProvider?.[id] ?? false,
-    });
-    return `${name} ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+    const age = Math.max(0, now - snapshot.fetchedAt);
+    if (age > opts.staleAfterMs) {
+        const failed = opts.lastRefreshFailedByProvider?.[id] ?? false;
+        return `${name} ${formatAge(age)} old${failed ? ' (failed)' : ''}`;
+    }
+    if (age < 30000)
+        return `${name} now`;
+    return `${name} ${Math.round(age / MINUTE_MS)} min`;
 }
 
 function multiProviderMenuModel(snapshot, now, opts) {
@@ -184,23 +202,39 @@ function multiProviderMenuModel(snapshot, now, opts) {
         lastRefreshFailedByProvider: opts.lastRefreshFailedByProvider};
     const claude = snapshot.providers?.claude;
     const codex = snapshot.providers?.codex;
-    const sections = [];
+    const claudeSections = [];
     if (claude?.session) {
-        sections.push({...section('session', claude.session, now, values),
+        claudeSections.push({...section('session', claude.session, now, values),
             kind: 'claude:session',
-            title: 'Claude — Session (5-hour window)'});
+            providerName: 'Claude',
+            title: 'Session · 5 hours'});
     }
     if (claude?.week) {
-        sections.push({...section('week', claude.week, now, values),
-            kind: 'claude:week', title: 'Claude — Week (all models)'});
+        claudeSections.push({...section('week', claude.week, now, values),
+            kind: 'claude:week', providerName: 'Claude',
+            title: 'All models · 7 days'});
     }
     for (const [index, entry] of (claude?.weekModel ?? []).entries()) {
-        sections.push({...section('weekModel', entry, now, values),
+        claudeSections.push({...section('weekModel', entry, now, values),
             kind: `claude:model:${index}`,
-            title: `Claude · ${entry.model} — Week`});
+            providerName: 'Claude',
+            title: `${boundedLabel(entry.model)} · 7 days`});
     }
+    const codexSections = [];
     for (const [index, window] of (codex?.windows ?? []).entries())
-        sections.push(codexSection(window, index, now, values));
+        codexSections.push(codexSection(window, index, now, values));
+    const groups = [{
+        id: 'claude',
+        title: 'Claude',
+        iconName: 'user-available-symbolic',
+        sections: claudeSections,
+    }, {
+        id: 'codex',
+        title: 'Codex',
+        iconName: 'utilities-terminal-symbolic',
+        sections: codexSections,
+    }].filter(group => group.sections.length > 0);
+    const sections = groups.flatMap(group => group.sections);
 
     const claudeConstraint = constraintOf(claude);
     let codexConstraint = null;
@@ -255,6 +289,7 @@ function multiProviderMenuModel(snapshot, now, opts) {
     return {
         promoted: promoted.length === 0 ? null : promoted.join('\n'),
         notice,
+        groups,
         sections,
         footer: {freshnessText, stale},
     };

@@ -44,8 +44,16 @@ export const PERCENT_ONLY = 'percent-only';
 const DIM_OPACITY = 0.55;
 
 const PROVIDERS = [
-    {id: 'claude', name: 'Claude', symbol: 'spark'},
-    {id: 'codex', name: 'Codex', symbol: 'code'},
+    {
+        id: 'claude',
+        name: 'Claude',
+        iconName: 'user-available-symbolic',
+    },
+    {
+        id: 'codex',
+        name: 'Codex',
+        iconName: 'utilities-terminal-symbolic',
+    },
 ];
 
 function windowName(constraint) {

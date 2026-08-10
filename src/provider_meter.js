@@ -1,108 +1,28 @@
-// RFC-002 compact provider marks and vertical quota meters. Both marks are
-// original Cairo geometry: an eight-ray spark for Claude and generic source
-// code brackets for Codex. No vendor logos or external artwork are used.
+// RFC-002 compact vertical quota meter. Provider identity uses generic system
+// symbolic icons in indicator.js; this file draws only the fixed-size fill.
 import Cairo from 'cairo';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
-const SYMBOL_SIZE = 18;
 const METER_WIDTH = 6;
-const METER_HEIGHT = 18;
+const METER_HEIGHT = 16;
 
-const ScaledDrawingArea = GObject.registerClass(
-class ScaledDrawingArea extends St.DrawingArea {
+const MeterDrawingArea = GObject.registerClass(
+class MeterDrawingArea extends St.DrawingArea {
     _init(params) {
         super._init(params);
         this._styleChangedId = this.connect('style-changed',
             () => this.queue_repaint());
-        this._themeContext = St.ThemeContext.get_for_stage(global.stage);
-        this._scaleChangedId = this._themeContext.connect(
-            'notify::scale-factor', () => this._updateSize());
         this.connect('destroy', () => this._onDestroy());
     }
 
     _onDestroy() {
         this.disconnect(this._styleChangedId);
-        this._themeContext.disconnect(this._scaleChangedId);
-        this._themeContext = null;
-    }
-});
-
-export const ProviderSymbol = GObject.registerClass(
-class ProviderSymbol extends ScaledDrawingArea {
-    _init(symbol) {
-        super._init({style_class: 'system-status-icon'});
-        this._symbol = symbol;
-        this._updateSize();
-    }
-
-    _updateSize() {
-        const scale = this._themeContext.scale_factor;
-        this.set_size(SYMBOL_SIZE * scale, SYMBOL_SIZE * scale);
-    }
-
-    vfunc_repaint() {
-        const cr = this.get_context();
-        try {
-            const [width, height] = this.get_surface_size();
-            const size = Math.min(width, height);
-            if (size <= 0)
-                return;
-            cr.translate((width - size) / 2, (height - size) / 2);
-            const color = this.get_theme_node().get_foreground_color();
-            cr.setSourceRGBA(color.red / 255, color.green / 255,
-                color.blue / 255, color.alpha / 255);
-            cr.setLineWidth(size * 0.115);
-            cr.setLineCap(Cairo.LineCap.ROUND);
-            cr.setLineJoin(Cairo.LineJoin.ROUND);
-            if (this._symbol === 'spark')
-                this._paintSpark(cr, size);
-            else
-                this._paintCode(cr, size);
-        } finally {
-            cr.$dispose();
-        }
-    }
-
-    _paintSpark(cr, size) {
-        const c = size / 2;
-        const inner = size * 0.16;
-        const outer = size * 0.42;
-        for (let i = 0; i < 8; i++) {
-            const angle = i * Math.PI / 4;
-            const length = i % 2 === 0 ? outer : outer * 0.72;
-            cr.moveTo(c + Math.cos(angle) * inner,
-                c + Math.sin(angle) * inner);
-            cr.lineTo(c + Math.cos(angle) * length,
-                c + Math.sin(angle) * length);
-        }
-        cr.stroke();
-        cr.arc(c, c, size * 0.075, 0, 2 * Math.PI);
-        cr.fill();
-    }
-
-    _paintCode(cr, size) {
-        const left = size * 0.18;
-        const right = size * 0.82;
-        const mid = size * 0.5;
-        const top = size * 0.25;
-        const bottom = size * 0.75;
-        cr.moveTo(mid - size * 0.08, top);
-        cr.lineTo(left, mid);
-        cr.lineTo(mid - size * 0.08, bottom);
-        cr.moveTo(mid + size * 0.08, top);
-        cr.lineTo(right, mid);
-        cr.lineTo(mid + size * 0.08, bottom);
-        // A center slash keeps the tiny mark legible as generic source code
-        // (`</>`) rather than as a diamond/eye at panel scale.
-        cr.moveTo(mid + size * 0.08, size * 0.2);
-        cr.lineTo(mid - size * 0.08, size * 0.8);
-        cr.stroke();
     }
 });
 
 export const VerticalUsageMeter = GObject.registerClass(
-class VerticalUsageMeter extends ScaledDrawingArea {
+class VerticalUsageMeter extends MeterDrawingArea {
     _init() {
         super._init({style_class: 'claudometer-provider-meter'});
         this._percent = null;
@@ -111,8 +31,10 @@ class VerticalUsageMeter extends ScaledDrawingArea {
     }
 
     _updateSize() {
-        const scale = this._themeContext.scale_factor;
-        this.set_size(METER_WIDTH * scale, METER_HEIGHT * scale);
+        // Actor dimensions are logical pixels; St scales the Cairo surface.
+        // Multiplying this allocation by the monitor scale made the previous
+        // marks too wide and vertically clipped on HiDPI panels.
+        this.set_size(METER_WIDTH, METER_HEIGHT);
     }
 
     update(percent, state) {

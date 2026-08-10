@@ -63,19 +63,20 @@ determines when you stop working.
 
 ```
 ┌─────────────────────────────┐
-│  ✣ ▮     </> ▮              │   provider symbol + vertical used meter
+│  [chat] ▮   [terminal] ▮    │   fixed provider icon + used meter
 └─────────────────────────────┘
 ```
 
-- **Provider symbols:** original Cairo geometry, not vendor artwork. Claude
-  uses an eight-ray spark (assistant/insight); Codex uses generic source-code
-  brackets with a slash. Both inherit panel foreground color.
-- **Meters:** one narrow 6×18 px vertical track beside each 18 px symbol,
+- **Provider symbols:** generic theme-provided symbolic icons, not vendor
+  artwork. Claude uses the system chat symbol; Codex uses the system terminal
+  symbol. The dropdown repeats these beside the provider headings so their
+  meaning does not rely on guesswork.
+- **Meters:** one narrow 6×16 px vertical track beside each 16 px symbol,
   filled from bottom to the provider constraint's percent used. Normal fill
   uses GNOME blue; warning/error use the configured state colors.
-- **Fixed representation:** no panel percentage label and no display-mode or
-  headline pin. The repeated compact units make the providers directly
-  comparable and match the supplied visual reference.
+- **Fixed representation:** each icon/meter unit is 25 px and the pair is 58
+  px total. No panel percentage label and no display-mode or headline pin.
+  Loading, stale, and unavailable transitions never resize the panel button.
 
 ### 3.2 Placement
 
@@ -119,36 +120,38 @@ behavior for free.
 ### 4.1 Layout (all data present)
 
 ```
-┌──────────────────────────────────────────┐
-│  Claude — Session (5-hour window)        │
-│  ████████████████░░░░░░░░  67%           │
-│  Resets in 2 h 15 m  (17:00)             │
-│  ──────────────────────────────────────  │
-│  Claude — Week (all models)              │
-│  ██████████░░░░░░░░░░░░░░  42%           │
-│  Resets Tue, Jul 28                      │
-│  ──────────────────────────────────────  │
-│  Claude · Opus — Week                    │
-│  ████░░░░░░░░░░░░░░░░░░░░  18%           │
-│  Resets Tue, Jul 28                      │
-│  ──────────────────────────────────────  │
-│  Codex — 5-hour window                   │
-│  ██████░░░░░░░░░░░░░░░░░░  25%           │
-│  Resets in 2 h 15 m (17:00)              │
-│  ──────────────────────────────────────  │
-│  Codex · Spark — 7-day window            │
-│  ████░░░░░░░░░░░░░░░░░░░░  18%           │
-│  Resets Tue, Jul 28                      │
-│  ──────────────────────────────────────  │
-│  Claude 2 min ago · Codex just now  ⟳    │
-└──────────────────────────────────────────┘
+┌──────────────────────────────┐
+│          [chat] Claude       │
+│  Session · 5 hours           │
+│  ███████████░░░░░░░░    67%  │
+│  Resets in 2 h 15 m (17:00)  │
+│  All models · 7 days         │
+│  ███████░░░░░░░░░░░░    42%  │
+│  Resets Tue, Jul 28          │
+│  Opus · 7 days               │
+│  ███░░░░░░░░░░░░░░░░    18%  │
+│  Resets Tue, Jul 28          │
+│  ──────────────────────────  │
+│        [terminal] Codex      │
+│  General · 5 hours           │
+│  █████░░░░░░░░░░░░░░    25%  │
+│  Resets in 2 h 15 m (17:00)  │
+│  Spark · 7 days              │
+│  ███░░░░░░░░░░░░░░░░    18%  │
+│  Resets Tue, Jul 28          │
+│  ──────────────────────────  │
+│  Claude 2 min · Codex now ⟳  │
+└──────────────────────────────┘
 ```
 
-Each window is a section: **provider-prefixed title row, progress bar with
-percentage, reset row.** Codex's optional `limitName` distinguishes
-model-specific buckets. Sections appear only for real windows. If their
-natural height exceeds the stage, the content scrolls within a height-capped
-viewport so every row and the refresh footer remain reachable.
+Provider identity appears once in a centered heading with the same generic
+symbol used in the panel. Each window is one compact section: **bounded title,
+progress bar with percentage, reset row.** Codex's optional `limitName`
+distinguishes model-specific buckets. Dynamic labels are capped at 24 Unicode
+characters and visually ellipsized as a second line of defense. The viewport
+is fixed at 300 px wide (or reduced only to fit a narrower stage), so data can
+never resize it. If natural height exceeds the stage, content scrolls while
+the refresh footer remains reachable.
 
 ### 4.2 Progress bars
 
@@ -171,8 +174,8 @@ viewport so every row and the refresh footer remain reachable.
 
 ### 4.4 Footer row
 
-- Left: independent freshness — for example
-  `Claude updated 2 min ago · Codex updated just now`.
+- Left: concise independent freshness — for example
+  `Claude 2 min · Codex now`.
   In the stale state this line carries the warning color and the icon's
   dimming is explained by the honest age: `Data is 25 min old`. The
   `— last refresh failed` clause is appended only when the last refresh
