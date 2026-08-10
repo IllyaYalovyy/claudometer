@@ -7,6 +7,7 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {Spinner} from 'resource:///org/gnome/shell/ui/animation.js';
@@ -25,6 +26,11 @@ const OPEN_REFRESH_MAX_AGE_MS = 15000;
 const TICK_INTERVAL_SEC = 1;
 
 const SPINNER_SIZE = 16;
+// Data must never dictate the popup geometry. This is deliberately close to
+// the compact system-monitor menu in the reference while retaining enough
+// room for one bounded model name.
+const MENU_WIDTH = 300;
+const MENU_EDGE_GUTTER = 48;
 
 // §4.2 progress bar: a thin rounded track + fill, drawn like the gauge —
 // monochrome in the theme node's foreground color, so the warning/error
@@ -118,21 +124,37 @@ class RefreshFooterItem extends PopupMenu.PopupBaseMenuItem {
     }
 });
 
-function label(text, styleClass = null) {
-    return new St.Label({
+function label(text, styleClass = null, {ellipsize = true} = {}) {
+    const actor = new St.Label({
         text,
         style_class: styleClass,
+        x_expand: true,
         y_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
+    if (ellipsize) {
+        actor.clutter_text.single_line_mode = true;
+        actor.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+    }
+    return actor;
 }
 
 // §4.5 notice lines are sentences, not data rows: wrap them instead of
 // letting a long explainer dictate the menu width (cap in stylesheet.css).
 function noticeLabel(styleClass) {
-    const noticeText = label('', styleClass);
+    const noticeText = label('', styleClass, {ellipsize: false});
     noticeText.clutter_text.line_wrap = true;
     return noticeText;
+}
+
+function modelGroups(model) {
+    return model.groups ?? [{
+        id: 'legacy', title: null, iconName: null, sections: model.sections,
+    }];
+}
+
+function flatSections(model) {
+    return modelGroups(model).flatMap(group => group.sections);
 }
 
 // Renders menu_model descriptors into `menu` (the indicator's PopupMenu)
@@ -225,8 +247,10 @@ export class ClaudometerMenu {
         // so an open menu keeps its keyboard focus.
         const key = (model.promoted === null ? '' : 'promoted|') +
             (model.notice === null ? '' : 'notice|') +
-            model.sections
-                .map(s => `${s.kind}:${s.resetText === null ? 0 : 1}`)
+            modelGroups(model)
+                .map(group => `${group.id}[${group.sections
+                    .map(s => `${s.kind}:${s.resetText === null ? 0 : 1}`)
+                    .join(',')}]`)
                 .join('|');
         if (key !== this._structureKey) {
             this._structureKey = key;
@@ -238,13 +262,14 @@ export class ClaudometerMenu {
             this._noticeHeadline.text = model.notice.headline;
             this._noticeDetail.text = model.notice.detail;
         }
-        model.sections.forEach((section, i) => {
+        flatSections(model).forEach((section, i) => {
             const row = this._rows[i];
             row.titleLabel.text = section.title;
             row.bar.update(section.percent, section.barState);
             row.percentLabel.text = section.percentText;
             if (row.resetLabel !== null)
                 row.resetLabel.text = section.resetText;
+            row.item.accessible_name = this._sectionAccessibleName(section);
         });
         this._updateFooter(model.footer);
     }
@@ -256,7 +281,7 @@ export class ClaudometerMenu {
         this._noticeDetail = null;
         // §4.5 limit-hit promotion: the first line of the menu.
         if (model.promoted !== null) {
-            this._promotedLabel = label('', 'claudometer-limit-promoted');
+            this._promotedLabel = noticeLabel('claudometer-limit-promoted');
             this._addTextItem(this._promotedLabel);
             this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         }
@@ -269,32 +294,89 @@ export class ClaudometerMenu {
             this._addTextItem(this._noticeDetail);
             this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         }
-        this._rows = model.sections.map(section => this._addSection(section));
+        this._rows = [];
+        const groups = modelGroups(model);
+        groups.forEach((group, groupIndex) => {
+            if (groupIndex > 0)
+                this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            if (group.title !== null)
+                this._addGroupHeading(group);
+            this._rows.push(...group.sections.map(
+                section => this._addSection(section)));
+        });
+        if (this._rows.length > 0)
+            this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._addFooter();
     }
 
-    // §4.1 section: title row, bar row with the percent datum, reset row
-    // (only when the model produced one), then a separator.
-    _addSection(section) {
-        const titleLabel = label(section.title);
-        this._addTextItem(titleLabel);
+    _addGroupHeading(group) {
+        const item = new PopupMenu.PopupBaseMenuItem({
+            reactive: false,
+            can_focus: false,
+        });
+        item.add_style_class_name('claudometer-provider-heading-item');
+        const box = new St.BoxLayout({
+            style_class: 'claudometer-provider-heading',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        box.add_child(new St.Icon({
+            icon_name: group.iconName,
+            icon_size: 16,
+            style_class: 'popup-menu-icon',
+        }));
+        const heading = label(group.title, 'claudometer-provider-heading-label');
+        heading.x_expand = false;
+        box.add_child(heading);
+        item.add_child(box);
+        item.label_actor = heading;
+        this._menu.addMenuItem(item);
+    }
 
-        const barItem = new PopupMenu.PopupBaseMenuItem({reactive: false});
+    // §4.1 section: one compact focusable block containing the title, bar,
+    // and optional reset. Keeping related values in one actor mirrors the
+    // grouped system-monitor reference and avoids separator-heavy menus.
+    _addSection(section) {
+        const item = new PopupMenu.PopupBaseMenuItem({reactive: false});
+        item.add_style_class_name('claudometer-usage-section-item');
+        const sectionBox = new St.BoxLayout({
+            vertical: true,
+            x_expand: true,
+            style_class: 'claudometer-usage-section',
+        });
+        const titleLabel = label(section.title, 'claudometer-section-title');
+        sectionBox.add_child(titleLabel);
+
+        const barRow = new St.BoxLayout({x_expand: true});
         const bar = new UsageBar();
-        const percentLabel = label(section.percentText);
-        barItem.add_child(bar);
-        barItem.add_child(percentLabel);
-        // §8: the bar is texture; the row reads as its number.
-        barItem.label_actor = percentLabel;
-        this._addFocusableMenuItem(barItem);
+        const percentLabel = label(section.percentText,
+            'claudometer-percent-label');
+        percentLabel.x_expand = false;
+        percentLabel.x_align = Clutter.ActorAlign.END;
+        barRow.add_child(bar);
+        barRow.add_child(percentLabel);
+        sectionBox.add_child(barRow);
 
         let resetLabel = null;
         if (section.resetText !== null) {
-            resetLabel = label(section.resetText);
-            this._addTextItem(resetLabel);
+            resetLabel = label(section.resetText, 'claudometer-reset-label');
+            resetLabel.opacity = 180;
+            sectionBox.add_child(resetLabel);
         }
-        this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        return {titleLabel, bar, percentLabel, resetLabel};
+        item.add_child(sectionBox);
+        item.label_actor = titleLabel;
+        item.accessible_name = this._sectionAccessibleName(section);
+        this._addFocusableMenuItem(item);
+        return {item, titleLabel, bar, percentLabel, resetLabel};
+    }
+
+    _sectionAccessibleName(section) {
+        const title = section.providerName === undefined
+            ? section.title
+            : `${section.providerName}, ${section.title}`;
+        return [title, section.percentText, section.resetText]
+            .filter(Boolean).join(', ');
     }
 
     _addTextItem(child) {
@@ -314,6 +396,7 @@ export class ClaudometerMenu {
         const item = new RefreshFooterItem();
         item.onRefresh = () => this._onRefreshClicked();
         this._freshnessLabel = label('', 'claudometer-freshness');
+        this._freshnessLabel.opacity = 180;
         this._freshnessLabel.x_expand = true;
         item.add_child(this._freshnessLabel);
         // §8: the activatable footer announces the freshness text; the
@@ -416,8 +499,12 @@ export class ClaudometerMenu {
 
     _updateScrollLimit() {
         // Leave room for the panel, BoxPointer margins, and a small visual
-        // gutter. max-height limits without forcing short menus to grow.
+        // gutter. Data changes never alter width; only a physically narrower
+        // stage may reduce it so the popup remains reachable.
         const maxHeight = Math.max(240, global.stage.height - 80);
-        this._scrollView.set_style(`max-height: ${maxHeight}px;`);
+        const width = Math.max(240,
+            Math.min(MENU_WIDTH, global.stage.width - MENU_EDGE_GUTTER));
+        this._scrollView.set_style(
+            `width: ${width}px; max-height: ${maxHeight}px;`);
     }
 }

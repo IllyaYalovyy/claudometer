@@ -51,8 +51,9 @@ tested so reruns test the same edge.
 ## A. UT-001 — glance at usage from the panel
 
 1. **Normal state, both provider constraints.** Feed Claude session 27%, week
-   34%, and Codex windows 25%/42%. Expect: spark + blue vertical meter at 34%,
-   then code-bracket mark + blue meter at 42%. No percentage labels.
+   34%, and Codex windows 25%/42%. Expect: chat icon + blue vertical meter at
+   34%, then terminal icon + blue meter at 42%. No percentage labels; the
+   combined provider strip remains 58 px wide after refresh.
 2. **Warning threshold boundary.** Feed either provider constraint exactly 80%
    (default warning threshold). Expect its meter in warning color
    (`#f5c211`); 79% must stay blue. The other provider is unchanged.
@@ -60,21 +61,23 @@ tested so reruns test the same edge.
    95%. Expect its meter in error color (`#c01c28`); 94% stays warning.
 4. **Limit hit.** Feed constraint 100% with a reset ~1 h out. Expect a full
    error-color meter; the dropdown and accessible name carry the reset time.
-5. **Neutral symbols.** At 1× and 2× scale, verify the original eight-ray
-   spark and generic `</>` mark are crisp and distinguishable, with no vendor
-   logos or brand artwork.
+5. **Neutral symbols.** At 1× and 2× scale, verify the generic system chat and
+   terminal icons are crisp and distinguishable, with no vendor logos or
+   bundled brand artwork. The same icons appear beside dropdown headings.
 6. **Independent unavailable state.** Make Codex unavailable with healthy
    Claude data, then reverse it. Expect only the unavailable provider pair to
    dim and show a slashed empty meter.
 
 ## B. UT-002 — usage detail on demand
 
-7. **Menu layout.** Open the menu on full fixture data. Expect provider-prefixed
-   Claude session/week/model sections, then general Codex and named model
-   bucket sections; each has title, progress bar + percent, reset row, and
-   separators. The footer reports both provider ages. At 1280×720, verify the
-   menu scrolls just enough to reach the footer instead of extending off-stage.
-   No settings gear.
+7. **Menu layout and width.** Open the menu on full fixture data. Expect one
+   centered Claude heading followed by session/week/model sections, then one
+   centered Codex heading followed by general/named model sections. Provider
+   names do not repeat in titles. Each quota is one compact title/bar/reset
+   block and only provider groups are separated. The viewport remains 300 px
+   wide with normal data, a 100-character model name, and unavailable states;
+   the long title ellipsizes. At 1280×720, verify overflow scrolls to the
+   footer instead of extending off-stage. No settings gear.
 8. **Independent bar coloring.** Feed session 97% + week 34%. Expect only
    the session bar in error color; the week bar stays foreground.
 9. **Reset row formats.** A reset < 24 h away renders
@@ -186,6 +189,7 @@ move older ones to the task/issue that ran them.
 
 | Executed | Commit | Items | Result |
 |---|---|---|---|
+| 2026-08-10 | working tree (grouped compact UI revision) | RFC-002 items 1, 5, 7, 26 | PASS in GNOME Shell 49.7 headless: generic chat/terminal icons rendered consistently in panel/headings; groups removed every repeated provider prefix; panel stayed 58 px and menu stayed 300 px across live, long-name, and unavailable snapshots; long titles ellipsized; clean enable/disable. Full release smoke remains required. |
 | 2026-08-09 | working tree (RFC-002 implementation) | RFC-002 items 1, 5, 7, 19, 26 | PASS in GNOME Shell 49.9 headless: two symbols/meters rendered from live Claude+Codex data, five provider-prefixed menu windows rendered general-before-model, 720px overflow scrolled to a reachable footer, keyboard focus auto-scrolled the footer into view, combined accessible name present, clean enable/disable. Full release smoke remains required. |
 | 2026-07-26 | the commit carrying this table (task #14) | 1–28 | 25 PASS as written; 3 FAIL → fixed in the same commit and re-verified PASS (details below) |
 

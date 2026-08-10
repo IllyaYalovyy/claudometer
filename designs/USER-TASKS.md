@@ -20,10 +20,11 @@ one of Claude Code or Codex is installed and authenticated on the machine.
 
 1. User looks at the GNOME top panel.
 
-**Outcome:** The indicator shows one neutral provider symbol and vertical
+**Outcome:** The indicator shows one generic provider symbol and vertical
 constraint meter for Claude and Codex. Available providers show current used
 quota; unavailable providers are explicitly slashed without hiding the other.
-The extension has not sent anything to a model to produce either reading.
+The two fixed-width units never resize as data changes. The extension has not
+sent anything to a model to produce either reading.
 
 **Interactions:** 0 (ambient - no click required for the headline number).
 
@@ -49,8 +50,9 @@ Live-Shell rendering: `docs/SMOKE-TEST.md` items 1–6.
 **Flow:**
 
 1. User clicks the panel indicator.
-2. The dropdown opens showing provider-prefixed Claude and Codex windows,
-   percentages, and reset times (including model-specific buckets).
+2. The fixed-width dropdown opens with one Claude group and one Codex group,
+   each showing compact window titles, percentages, and reset times (including
+   bounded model-specific bucket names).
 3. User clicks elsewhere to dismiss.
 
 **Outcome:** Detail and independent provider freshness are visible while open;

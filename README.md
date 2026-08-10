@@ -6,11 +6,12 @@ starting a model turn to check.
 
 ## What it shows
 
-- Two compact symbol-and-meter pairs in the top panel: an original spark for
-  Claude and generic code brackets for Codex. Each vertical meter shows the
-  provider's most constrained window.
+- Two compact symbol-and-meter pairs in the top panel: a generic chat symbol
+  for Claude and terminal symbol for Codex. Each vertical meter shows the
+  provider's most constrained window; their combined width is fixed.
 - A dropdown with every Claude and Codex window, including model-specific
-  buckets, with progress bars, reset times, and per-provider freshness.
+  buckets, grouped under one heading per provider. Its width is fixed and
+  long model names are shortened rather than resizing the popup.
 - A preferences window for alert thresholds and refresh cadence. Panel
   position and the compact representation are deliberately fixed.
 
@@ -77,9 +78,9 @@ shows whichever of that provider's rate-limit windows has the highest usage.
 | Dimmed symbol and meter | That provider's last known data is stale |
 | Dimmed slashed empty meter | That provider is unavailable; the other remains independent |
 
-**Click the meters** for detail: one section per Claude or Codex window
-with a progress bar and reset time, plus a footer showing freshness for both
-providers and a manual refresh button. The
+**Click the meters** for detail: compact Claude and Codex groups contain one
+section per quota window with a progress bar and reset time, plus a footer
+showing freshness for both providers and a manual refresh button. The
 menu is fully keyboard-operable (arrows, Enter on the footer refreshes,
 Esc closes).
 

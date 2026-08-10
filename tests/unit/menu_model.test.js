@@ -305,14 +305,42 @@ test('multi_provider_menu_lists_claude_and_every_codex_bucket_window', () => {
             resetsAt: FAR_RESET,
         }]},
     }});
+    assertEquals(m.groups.length, 2);
+    assertEquals(m.groups[0].title, 'Claude');
+    assertEquals(m.groups[0].iconName, 'user-available-symbolic');
+    assertEquals(m.groups[0].sections.length, 2);
+    assertEquals(m.groups[1].title, 'Codex');
+    assertEquals(m.groups[1].iconName, 'utilities-terminal-symbolic');
+    assertEquals(m.groups[1].sections.length, 2);
     assertEquals(m.sections.length, 4);
-    assertEquals(m.sections[0].title, 'Claude — Session (5-hour window)');
-    assertEquals(m.sections[2].title, 'Codex — 5-hour window');
+    assertEquals(m.sections[0].providerName, 'Claude');
+    assertEquals(m.sections[2].providerName, 'Codex');
+    assertEquals(m.sections[0].title, 'Session · 5 hours');
+    assertEquals(m.sections[1].title, 'All models · 7 days');
+    assertEquals(m.sections[2].title, 'General · 5 hours');
     assertEquals(m.sections[3].title,
-        'Codex · GPT-5.3-Codex-Spark — 7-day window');
+        'GPT-5.3-Codex-Spark · 7 days');
     assertEquals(m.notice, null);
-    assertEquals(m.footer.freshnessText,
-        'Claude updated just now · Codex updated just now');
+    assertEquals(m.footer.freshnessText, 'Claude now · Codex now');
+});
+
+test('provider_names_are_grouped_once_and_dynamic_titles_are_bounded', () => {
+    const longName = 'A-very-long-model-name-that-must-not-resize-the-popup';
+    const m = model({providers: {
+        claude: {fetchedAt: NOW, weekModel: [{
+            model: longName, percent: 12, resetsAt: FAR_RESET,
+        }]},
+        codex: {fetchedAt: NOW, windows: [{
+            limitId: 'long', limitName: longName, slot: 'primary', percent: 9,
+            durationMins: 10080, resetsAt: FAR_RESET,
+        }]},
+    }});
+    assertEquals(m.sections.every(section =>
+        !section.title.startsWith('Claude') &&
+        !section.title.startsWith('Codex')), true);
+    assertEquals(m.sections.every(section => section.title.length <= 34), true);
+    assertEquals(m.sections[0].title.includes('…'), true);
+    assertEquals(m.sections[1].title.includes('…'), true);
 });
 
 test('one_unavailable_provider_keeps_the_other_rows_and_gets_its_own_notice', () => {
@@ -321,10 +349,11 @@ test('one_unavailable_provider_keeps_the_other_rows_and_gets_its_own_notice', ()
         codex: {fetchedAt: NOW, error: NOT_INSTALLED},
     }});
     assertEquals(m.sections.length, 1);
-    assertEquals(m.sections[0].title.startsWith('Claude'), true);
+    assertEquals(m.groups.length, 1);
+    assertEquals(m.groups[0].title, 'Claude');
+    assertEquals(m.sections[0].title, 'Session · 5 hours');
     assertEquals(m.notice.headline, 'Codex was not found on this system.');
-    assertEquals(m.footer.freshnessText,
-        'Claude updated just now · Codex unavailable');
+    assertEquals(m.footer.freshnessText, 'Claude now · Codex unavailable');
 });
 
 runTests();
