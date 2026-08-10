@@ -18,11 +18,15 @@
 
 import {
     classify,
+    constraintOf,
+    CRITICAL,
     headlineOf,
     HEADLINE_AUTO,
     LIMIT_HIT,
+    NORMAL,
     STALE,
     UNAVAILABLE,
+    WARNING,
 } from './derive.js';
 import {
     formatAge,
@@ -38,6 +42,11 @@ export const PERCENT_ONLY = 'percent-only';
 
 // §3.3: stale/unavailable render at 55% opacity.
 const DIM_OPACITY = 0.55;
+
+const PROVIDERS = [
+    {id: 'claude', name: 'Claude', symbol: 'spark'},
+    {id: 'codex', name: 'Codex', symbol: 'code'},
+];
 
 function windowName(constraint) {
     if (constraint.kind === 'session')
@@ -57,7 +66,92 @@ function resetClause(constraint, now, clock24) {
     return `, ${row.charAt(0).toLowerCase()}${row.slice(1)}`;
 }
 
+function codexConstraint(snapshot) {
+    let constraint = null;
+    for (const window of snapshot?.windows ?? []) {
+        if (constraint === null || window.percent > constraint.percent)
+            constraint = window;
+    }
+    return constraint;
+}
+
+function providerItem(provider, snapshot, now, opts) {
+    const {
+        warningAt = 80,
+        criticalAt = 95,
+        staleAfterMs = 3 * 60000,
+    } = opts;
+    const constraint = provider.id === 'claude'
+        ? constraintOf(snapshot)
+        : codexConstraint(snapshot);
+    let state;
+    if (constraint === null) {
+        state = UNAVAILABLE;
+    } else if (now - snapshot.fetchedAt > staleAfterMs) {
+        state = STALE;
+    } else if (constraint.percent >= 100) {
+        state = LIMIT_HIT;
+    } else if (constraint.percent >= criticalAt) {
+        state = CRITICAL;
+    } else if (constraint.percent >= warningAt) {
+        state = WARNING;
+    } else {
+        state = NORMAL;
+    }
+
+    if (constraint === null) {
+        return {
+            ...provider,
+            percent: null,
+            state,
+            meterState: UNAVAILABLE,
+            styleClass: 'claudometer-provider-unavailable',
+            opacity: DIM_OPACITY,
+            accessibleName: `${provider.name} usage data unavailable`,
+        };
+    }
+
+    let meterState = state;
+    if (state === STALE) {
+        if (constraint.percent >= 100)
+            meterState = LIMIT_HIT;
+        else if (constraint.percent >= criticalAt)
+            meterState = CRITICAL;
+        else if (constraint.percent >= warningAt)
+            meterState = WARNING;
+        else
+            meterState = NORMAL;
+    }
+
+    let accessibleName = `${provider.name} usage: ` +
+        `${Math.round(constraint.percent)} percent used`;
+    if (state === STALE)
+        accessibleName += `, data is ${formatAge(now - snapshot.fetchedAt)} old`;
+    else if (constraint.resetsAt != null)
+        accessibleName += resetClause(constraint, now, opts.clock24 ?? true);
+    return {
+        ...provider,
+        percent: constraint.percent,
+        state,
+        meterState,
+        styleClass: `claudometer-provider-${state}`,
+        opacity: state === STALE ? DIM_OPACITY : 1,
+        accessibleName,
+    };
+}
+
+function multiProviderModel(snapshot, now, opts) {
+    const items = PROVIDERS.map(provider => providerItem(
+        provider, snapshot.providers?.[provider.id], now, opts));
+    return {
+        items,
+        accessibleName: items.map(item => item.accessibleName).join('; '),
+    };
+}
+
 export function indicatorModel(snapshot, now, opts = {}) {
+    if (snapshot?.providers !== undefined)
+        return multiProviderModel(snapshot, now, opts);
     const {
         displayMode = ICON_AND_PERCENT,
         headlineMetric = HEADLINE_AUTO,

@@ -156,9 +156,27 @@ export class ClaudometerMenu {
         this._noticeDetail = null;
         this._tickId = 0;
 
+        // RFC-002 can add several Codex buckets to Claude's existing three
+        // windows. Cap the natural menu height to the current stage and let
+        // standard St scrolling keep every row/footer reachable on small
+        // displays. The PopupMenu box remains the item/focus owner; only its
+        // viewport changes.
+        this._scrollView = new St.ScrollView({
+            style_class: 'claudometer-menu-scroll',
+            hscrollbar_policy: St.PolicyType.NEVER,
+            vscrollbar_policy: St.PolicyType.AUTOMATIC,
+            overlay_scrollbars: true,
+        });
+        const boxParent = menu.box.get_parent();
+        boxParent.set_child(null);
+        this._scrollView.set_child(menu.box);
+        boxParent.set_child(this._scrollView);
+        this._updateScrollLimit();
+
         this._openStateId = menu.connect('open-state-changed',
             (_menu, open) => {
                 if (open) {
+                    this._updateScrollLimit();
                     // Not a manual refresh (#23): no spinner, no give-up
                     // re-arm — the source's own gates decide any spawn.
                     this._scheduler.maybeRefresh(OPEN_REFRESH_MAX_AGE_MS);
@@ -188,6 +206,7 @@ export class ClaudometerMenu {
         this._refreshButton = null;
         this._refreshIcon = null;
         this._refreshSpinner = null;
+        this._scrollView = null;
     }
 
     // Apply a fresh snapshot. `opts` is the menu_model options bag
@@ -267,7 +286,7 @@ export class ClaudometerMenu {
         barItem.add_child(percentLabel);
         // §8: the bar is texture; the row reads as its number.
         barItem.label_actor = percentLabel;
-        this._menu.addMenuItem(barItem);
+        this._addFocusableMenuItem(barItem);
 
         let resetLabel = null;
         if (section.resetText !== null) {
@@ -284,7 +303,7 @@ export class ClaudometerMenu {
         // §8: rows are real menu items with proper labels — a row walked
         // by keyboard/screen reader announces its own text.
         item.label_actor = child;
-        this._menu.addMenuItem(item);
+        this._addFocusableMenuItem(item);
     }
 
     // §4.4 footer: freshness left, refresh button right. The row is the
@@ -318,8 +337,31 @@ export class ClaudometerMenu {
         });
         this._refreshButton.connect('clicked', () => this._onRefreshClicked());
         item.add_child(this._refreshButton);
-        this._menu.addMenuItem(item);
+        this._addFocusableMenuItem(item);
         this._syncSpinner();
+    }
+
+    _addFocusableMenuItem(item) {
+        item.connect('key-focus-in', () => this._ensureItemVisible(item));
+        this._menu.addMenuItem(item);
+    }
+
+    _ensureItemVisible(item) {
+        if (!this._scrollView || !this._menu.isOpen)
+            return;
+        const adjustment = this._scrollView.get_vadjustment();
+        const [, viewportY] = this._scrollView.get_transformed_position();
+        const [, itemY] = item.get_transformed_position();
+        const viewportBottom = viewportY + this._scrollView.height;
+        const itemBottom = itemY + item.height;
+        if (itemY < viewportY) {
+            adjustment.value = Math.max(adjustment.lower,
+                adjustment.value - (viewportY - itemY));
+        } else if (itemBottom > viewportBottom) {
+            adjustment.value = Math.min(
+                adjustment.upper - adjustment.page_size,
+                adjustment.value + itemBottom - viewportBottom);
+        }
     }
 
     _updateFooter(footer) {
@@ -370,5 +412,12 @@ export class ClaudometerMenu {
             GLib.source_remove(this._tickId);
             this._tickId = 0;
         }
+    }
+
+    _updateScrollLimit() {
+        // Leave room for the panel, BoxPointer margins, and a small visual
+        // gutter. max-height limits without forcing short menus to grow.
+        const maxHeight = Math.max(240, global.stage.height - 80);
+        this._scrollView.set_style(`max-height: ${maxHeight}px;`);
     }
 }

@@ -2,32 +2,32 @@
 
 ## The Problem
 
-Claude Code usage is metered in ways that are easy to lose track of:
-session token counts, rolling 5-hour limits, and weekly limits, depending on
-plan. Today, checking any of this means switching into a terminal, running
-`claude`, and typing `/usage`. There is no ambient, always-visible way to see
-it while working in other windows.
+Claude Code and Codex usage are metered in ways that are easy to lose track
+of: short rolling windows, weekly limits, and model-specific buckets,
+depending on plan. Their usage views live inside separate coding clients.
+There is no single ambient, always-visible way to compare them while working
+in other windows.
 
 ## The Solution
 
-Claudometer is a GNOME Shell extension that surfaces Claude Code usage in the
-top panel: a compact indicator, with a dropdown for more detail (session
-tokens, rolling-window usage, plan limits, reset times).
+Claudometer is a GNOME Shell extension that surfaces Claude Code and Codex
+usage in the top panel: one compact symbol-and-meter pair per provider, with a
+dropdown for rolling-window usage, plan limits, and reset times.
 
 **Core principles:**
 
-1. **Zero token cost, by construction.** The extension must never consume
-   Claude API tokens or model output to report on Claude API tokens. Every
-   data source it uses must be a local read or a metadata-only query — never
-   a prompt sent to the model. This is the one constraint the whole design
-   answers to; see `designs/RFC-001-usage-data-source.md` for how usage data
-   is actually obtained and why.
+1. **No model cost, by construction.** The extension must never start a model
+   turn or consume model output to report usage. Every provider source must
+   be a local read or a documented metadata-only account query — never a
+   prompt sent to a model. See `designs/RFC-001-usage-data-source.md` and
+   `designs/RFC-002-multi-provider-usage.md` for the provider boundaries.
 2. **Ambient, not intrusive.** A glance at the panel is enough. No polling
    loop should be aggressive enough to matter for battery or CPU; no popup
    should interrupt work uninvited.
-3. **Read-only.** Claudometer observes Claude Code's own local state and CLI;
-   it does not modify configuration, sessions, or credentials, and it does
-   not talk to any network endpoint on its own.
+3. **Read-only.** Claudometer observes each coding client's own state and
+   read-only account interface. It does not modify configuration, sessions,
+   credits, or credentials, and it does not talk to provider network
+   endpoints on its own.
 4. **Native GNOME Shell UX.** Follows GNOME HIG for panel indicators
    (`St`/`Clutter` widgets, `PopupMenu` patterns), respects light/dark theme,
    and works across the GNOME Shell versions it declares support for in
@@ -37,11 +37,12 @@ tokens, rolling-window usage, plan limits, reset times).
 
 ## What Claudometer is NOT
 
-- Not a Claude Code client — it does not send prompts, run tools, or start
-  sessions. It only reads usage/status information.
-- Not a general system-monitor extension — scope is Claude Code usage only.
-- Not a replacement for `/usage`, `/cost`, or `/status` in the CLI — it is a
-  glanceable summary, not a full accounting UI.
+- Not a Claude Code or Codex client — it does not send prompts, run tools, or
+  start sessions. It only reads usage/status metadata.
+- Not a general system-monitor extension — scope is supported coding-agent
+  subscription usage only.
+- Not a replacement for provider usage/cost/status views — it is a glanceable
+  summary, not a full accounting UI.
 - Not a cloud dashboard — no server component, no account system, no data
   leaves the machine.
 - Not an API-key cost meter — Claudometer is for subscription plans and
@@ -51,15 +52,16 @@ tokens, rolling-window usage, plan limits, reset times).
 
 ## Target Users
 
-Developers on a Claude subscription plan who run Claude Code regularly
-across multiple terminals or projects and want to see how close they are to
-a rate-limit window without interrupting a session to check.
+Developers on Claude and/or ChatGPT subscription plans who use Claude Code or
+Codex across multiple terminals and projects and want to see how close each
+provider is to a rate-limit window without interrupting a session to check.
 
 ## Success Criteria
 
 Claudometer succeeds when a user can:
 
-- See current Claude Code usage at a glance from the GNOME top panel.
-- Trust that checking usage never itself burns tokens or quota.
+- See current Claude Code and Codex usage at a glance from the GNOME panel.
+- Trust that checking usage never itself starts a model turn or burns model
+  quota.
 - Install it from a single extension package with no configuration required
   beyond what GNOME Extensions already provides.

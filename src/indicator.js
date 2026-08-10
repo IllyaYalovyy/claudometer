@@ -11,6 +11,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {GaugeIcon} from './gauge.js';
 import {indicatorModel} from './lib/indicator_model.js';
+import {ProviderSymbol, VerticalUsageMeter} from './provider_meter.js';
 
 export const ClaudometerIndicator = GObject.registerClass(
 class ClaudometerIndicator extends PanelMenu.Button {
@@ -21,10 +22,22 @@ class ClaudometerIndicator extends PanelMenu.Button {
         const box = new St.BoxLayout({
             style_class: 'panel-status-indicators-box',
         });
+        this._box = box;
+        this._providerBox = new St.BoxLayout({
+            style_class: 'claudometer-provider-list',
+            visible: false,
+        });
+        this._providerItems = new Map();
+        box.add_child(this._providerBox);
+
+        this._legacyBox = new St.BoxLayout({
+            style_class: 'panel-status-indicators-box',
+        });
         this._icon = new GaugeIcon();
         this._label = new St.Label({y_align: Clutter.ActorAlign.CENTER});
-        box.add_child(this._icon);
-        box.add_child(this._label);
+        this._legacyBox.add_child(this._icon);
+        this._legacyBox.add_child(this._label);
+        box.add_child(this._legacyBox);
         this.add_child(box);
     }
 
@@ -33,6 +46,18 @@ class ClaudometerIndicator extends PanelMenu.Button {
     // arrive as args, per the design's pure-model contract.
     update(snapshot, now, opts = {}) {
         const model = indicatorModel(snapshot, now, opts);
+
+        if (model.items !== undefined) {
+            this._legacyBox.visible = false;
+            this._providerBox.visible = true;
+            this._updateProviderItems(model.items);
+            this.opacity = 255;
+            this.accessible_name = model.accessibleName;
+            return;
+        }
+
+        this._providerBox.visible = false;
+        this._legacyBox.visible = true;
 
         this._icon.visible = model.iconVariant !== null;
         if (model.iconVariant !== null)
@@ -53,5 +78,27 @@ class ClaudometerIndicator extends PanelMenu.Button {
 
         // §8: the accessible name carries the full story on every update.
         this.accessible_name = model.accessibleName;
+    }
+
+    _updateProviderItems(models) {
+        for (const model of models) {
+            let item = this._providerItems.get(model.id);
+            if (item === undefined) {
+                const actor = new St.BoxLayout({
+                    style_class: 'claudometer-provider-item',
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                const symbol = new ProviderSymbol(model.symbol);
+                const meter = new VerticalUsageMeter();
+                actor.add_child(symbol);
+                actor.add_child(meter);
+                this._providerBox.add_child(actor);
+                item = {actor, meter};
+                this._providerItems.set(model.id, item);
+            }
+            item.meter.update(model.percent, model.meterState);
+            item.actor.opacity = Math.round(model.opacity * 255);
+            item.actor.accessible_name = model.accessibleName;
+        }
     }
 });

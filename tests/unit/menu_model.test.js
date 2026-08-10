@@ -289,4 +289,42 @@ test('reset_rows_honor_the_12_hour_clock_option', () => {
     assertEquals(sections[0].resetText, 'Resets in 2 h 15 m (5:00 PM)');
 });
 
+test('multi_provider_menu_lists_claude_and_every_codex_bucket_window', () => {
+    const m = model({providers: {
+        claude: {
+            fetchedAt: NOW,
+            session: {percent: 67, resetsAt: RESET},
+            week: {percent: 42, resetsAt: FAR_RESET},
+        },
+        codex: {fetchedAt: NOW, windows: [{
+            limitId: 'codex', slot: 'primary', percent: 25,
+            durationMins: 300, resetsAt: RESET,
+        }, {
+            limitId: 'codex_spark', limitName: 'GPT-5.3-Codex-Spark',
+            slot: 'primary', percent: 18, durationMins: 10080,
+            resetsAt: FAR_RESET,
+        }]},
+    }});
+    assertEquals(m.sections.length, 4);
+    assertEquals(m.sections[0].title, 'Claude — Session (5-hour window)');
+    assertEquals(m.sections[2].title, 'Codex — 5-hour window');
+    assertEquals(m.sections[3].title,
+        'Codex · GPT-5.3-Codex-Spark — 7-day window');
+    assertEquals(m.notice, null);
+    assertEquals(m.footer.freshnessText,
+        'Claude updated just now · Codex updated just now');
+});
+
+test('one_unavailable_provider_keeps_the_other_rows_and_gets_its_own_notice', () => {
+    const m = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 40}},
+        codex: {fetchedAt: NOW, error: NOT_INSTALLED},
+    }});
+    assertEquals(m.sections.length, 1);
+    assertEquals(m.sections[0].title.startsWith('Claude'), true);
+    assertEquals(m.notice.headline, 'Codex was not found on this system.');
+    assertEquals(m.footer.freshnessText,
+        'Claude updated just now · Codex unavailable');
+});
+
 runTests();

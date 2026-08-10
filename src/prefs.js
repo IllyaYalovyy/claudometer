@@ -1,5 +1,6 @@
-// UX-DESIGN.md §7: one page, three groups (Display / Thresholds /
-// Refresh). All validation lives in src/lib/settings_model.js; this file
+// UX-DESIGN.md §7 / RFC-002: one page, two groups (Thresholds / Refresh).
+// Legacy display keys stay schema-compatible but are no longer surfaced.
+// All validation lives in src/lib/settings_model.js; this file
 // only builds rows and shuttles values between widgets and GSettings.
 // Writes are guarded to only touch changed keys and every rule is
 // idempotent, so widget↔settings echo settles instead of looping.
@@ -11,23 +12,15 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 import {
     CRITICAL_PERCENT_MAX,
     CRITICAL_PERCENT_MIN,
-    HEADLINE_METRICS,
-    INDICATOR_STYLES,
     REFRESH_INTERVALS_SEC,
     WARNING_PERCENT_MAX,
     WARNING_PERCENT_MIN,
-    normalizeHeadlineMetric,
-    normalizeIndicatorStyle,
     normalizeRefreshInterval,
     normalizeThresholds,
     refreshIntervalLabel,
     setCriticalPercent,
     setWarningPercent,
 } from './lib/settings_model.js';
-
-// §7 row wording, in INDICATOR_STYLES / HEADLINE_METRICS order.
-const INDICATOR_STYLE_LABELS = ['Icon and percentage', 'Icon only', 'Percentage only'];
-const HEADLINE_METRIC_LABELS = ['Most constrained', 'Session window', 'Weekly'];
 
 // A ComboRow whose selection mirrors one settings key. `read` normalizes
 // the stored value (garbage from a CLI write selects the default), `write`
@@ -71,37 +64,15 @@ export default class ClaudometerPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         const page = new Adw.PreferencesPage();
-        page.add(this._displayGroup(settings));
         page.add(this._thresholdsGroup(settings));
         page.add(this._refreshGroup(settings));
         window.add(page);
     }
 
-    _displayGroup(settings) {
-        const group = new Adw.PreferencesGroup({title: 'Display'});
-        group.add(comboRow(settings, 'indicator-style', {
-            title: 'Indicator style',
-            choices: INDICATOR_STYLES,
-            labels: INDICATOR_STYLE_LABELS,
-            read: () => normalizeIndicatorStyle(
-                settings.get_string('indicator-style')),
-            write: choice => settings.set_string('indicator-style', choice),
-        }));
-        group.add(comboRow(settings, 'headline-metric', {
-            title: 'Headline metric',
-            choices: HEADLINE_METRICS,
-            labels: HEADLINE_METRIC_LABELS,
-            read: () => normalizeHeadlineMetric(
-                settings.get_string('headline-metric')),
-            write: choice => settings.set_string('headline-metric', choice),
-        }));
-        return group;
-    }
-
     _thresholdsGroup(settings) {
         const group = new Adw.PreferencesGroup({
             title: 'Thresholds',
-            description: 'Percent of the headline window’s limit',
+            description: 'Percent of each provider window’s limit',
         });
         const warningRow = spinRow('Warning at',
             WARNING_PERCENT_MIN, WARNING_PERCENT_MAX);

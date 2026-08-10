@@ -11,23 +11,25 @@ Each task should define:
 - **Interactions** - count of meaningful actions in the happy path
 - **Regression coverage** - test name or reason coverage is manual
 
-## UT-001: Glance at current Claude usage from the panel
+## UT-001: Glance at current Claude and Codex usage from the panel
 
-**Precondition:** GNOME Shell is running with Claudometer enabled; Claude
-Code is installed and authenticated on the same machine.
+**Precondition:** GNOME Shell is running with Claudometer enabled; at least
+one of Claude Code or Codex is installed and authenticated on the machine.
 
 **Flow:**
 
 1. User looks at the GNOME top panel.
 
-**Outcome:** The indicator shows a current usage figure (e.g. percentage of
-the active rolling window) without the user taking any action, and without
-the extension having sent anything to the model to produce it.
+**Outcome:** The indicator shows one neutral provider symbol and vertical
+constraint meter for Claude and Codex. Available providers show current used
+quota; unavailable providers are explicitly slashed without hiding the other.
+The extension has not sent anything to a model to produce either reading.
 
 **Interactions:** 0 (ambient - no click required for the headline number).
 
 **Regression coverage:**
-`derive.test.js` (constraint derivation:
+`derive.test.js` and `indicator_model.test.js` (per-provider constraint and
+compact-item derivation), plus the original Claude constraint coverage:
 `the_highest_percent_wins_across_all_window_groups`,
 `classifies_every_threshold_boundary_at_the_defaults`),
 `indicator_model.test.js` (`every_3_3_table_row_renders_in_the_default_mode`
@@ -40,20 +42,20 @@ fetch never invokes the model — is
 the `scripts/quality.d/50-fixtures` envelope invariants on every gate run.
 Live-Shell rendering: `docs/SMOKE-TEST.md` items 1–6.
 
-## UT-002: See usage detail on demand
+## UT-002: See Claude and Codex usage detail on demand
 
 **Precondition:** Same as UT-001.
 
 **Flow:**
 
 1. User clicks the panel indicator.
-2. The dropdown opens showing session tokens, rolling-window usage, and reset
-   time(s).
+2. The dropdown opens showing provider-prefixed Claude and Codex windows,
+   percentages, and reset times (including model-specific buckets).
 3. User clicks elsewhere to dismiss.
 
-**Outcome:** Detail is visible while open and the panel returns to the
-ambient indicator on dismiss; no background state changes as a result of
-opening it.
+**Outcome:** Detail and independent provider freshness are visible while open;
+the panel returns to the ambient indicator on dismiss. Opening does not change
+provider state except for the documented implicit metadata refresh.
 
 **Interactions:** 2 (open, dismiss).
 
@@ -66,17 +68,17 @@ opening it.
 focus, and the no-background-state-change rule need a running Shell:
 `docs/SMOKE-TEST.md` items 7–13 and 27.
 
-## UT-003: Understand when data is unavailable
+## UT-003: Understand when either provider is unavailable
 
-**Precondition:** Claude Code is not installed, not authenticated, or its
-local usage data cannot be read.
+**Precondition:** Claude Code or Codex is not installed, not authenticated, or
+its usage data cannot be read.
 
 **Flow:**
 
 1. User looks at the GNOME top panel.
 
-**Outcome:** The indicator shows a clear "unavailable" state rather than a
-stale, blank, or misleading number.
+**Outcome:** That provider's meter shows a clear unavailable state rather than
+a stale, blank, or misleading number; a healthy other provider stays visible.
 
 **Interactions:** 0.
 

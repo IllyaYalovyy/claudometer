@@ -1,15 +1,16 @@
 # Test fixtures
 
-Real, sanitized captures of the usage data sources evaluated in
-`designs/RFC-001-usage-data-source.md`. These are the ground truth for
+Real, sanitized captures of the usage data sources evaluated in RFC-001 and
+RFC-002. These are the ground truth for
 parser tests: fabricated fixtures that do not match a verified capture are
 forbidden (see the `test-quality` skill).
 
 ## Provenance
 
-Captured 2026-07-24 on Claude Code CLI **2.1.220** (`claude --version`),
-Linux, subscription plan. Capture commands are documented per fixture
-below; the full probe log is in RFC-001's Q1/Q2 evidence.
+Claude fixtures were captured 2026-07-24 on Claude Code CLI **2.1.220**
+(`claude --version`), Linux, subscription plan. Codex fixtures were captured
+2026-08-09 on Codex CLI **0.147.0** through the documented App Server method.
+Capture commands are documented per fixture below.
 
 ## Sanitization applied
 
@@ -21,6 +22,17 @@ below; the full probe log is in RFC-001's Q1/Q2 evidence.
   percentages) is byte-faithful to the real output.
 
 ## Fixtures
+
+### `codex-rate-limits-result.json` / `codex-app-server-response.json`
+
+The consumed projection of a live `account/rateLimits/read` response, and the
+same value inside its matching JSON-RPC response envelope. The probe sent only
+`initialize`, `initialized`, and `account/rateLimits/read`; it started no
+thread or turn. Unconsumed account/credit fields were removed rather than
+committed. The remaining bucket ids, names, percentages, durations, reset
+timestamps, nullability, and backend map order are capture-faithful. The map
+intentionally arrives model-specific first; parser tests prove the UI's stable
+general-before-model ordering.
 
 ### `cached-usage-utilization.json`
 

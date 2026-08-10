@@ -121,7 +121,148 @@ function promotedLine(constraint, now, clock24) {
         `${row.charAt(0).toLowerCase()}${row.slice(1)}`;
 }
 
+function durationLabel(minutes) {
+    if (minutes % 1440 === 0) {
+        const days = minutes / 1440;
+        return `${days}-day window`;
+    }
+    if (minutes % 60 === 0) {
+        const hours = minutes / 60;
+        return `${hours}-hour window`;
+    }
+    return `${minutes}-minute window`;
+}
+
+function codexSection(window, index, now, opts) {
+    const label = window.limitName ?? 'Codex';
+    return {
+        kind: `codex:${window.limitId}:${window.slot}:${index}`,
+        title: `Codex${label === 'Codex' ? '' : ` · ${label}`} — ` +
+            durationLabel(window.durationMins),
+        percent: window.percent,
+        percentText: formatPercent(window.percent),
+        barState: barState(window.percent, opts.warningAt, opts.criticalAt),
+        resetText: window.resetsAt == null
+            ? null
+            : formatResetRow(window.resetsAt, now, {clock24: opts.clock24}),
+    };
+}
+
+function providerNotice(id, snapshot) {
+    const name = id === 'claude' ? 'Claude Code' : 'Codex';
+    if (snapshot?.error === NOT_INSTALLED) {
+        return {
+            headline: `${name} was not found on this system.`,
+            detail: `Install ${name}, then refresh.`,
+        };
+    }
+    return {
+        headline: `Can't read ${name} usage data.`,
+        detail: `Open ${name} and sign in, then refresh.`,
+    };
+}
+
+function freshnessPart(id, snapshot, now, opts, usable) {
+    const name = id === 'claude' ? 'Claude' : 'Codex';
+    if (!usable || typeof snapshot?.fetchedAt !== 'number')
+        return `${name} unavailable`;
+    const text = formatFreshness(snapshot.fetchedAt, now, {
+        staleAfterMs: opts.staleAfterMs,
+        lastRefreshFailed: opts.lastRefreshFailedByProvider?.[id] ?? false,
+    });
+    return `${name} ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
+
+function multiProviderMenuModel(snapshot, now, opts) {
+    const {
+        clock24 = true,
+        warningAt = 80,
+        criticalAt = 95,
+        staleAfterMs = DEFAULT_STALE_AFTER_MS,
+    } = opts;
+    const values = {clock24, warningAt, criticalAt, staleAfterMs,
+        lastRefreshFailedByProvider: opts.lastRefreshFailedByProvider};
+    const claude = snapshot.providers?.claude;
+    const codex = snapshot.providers?.codex;
+    const sections = [];
+    if (claude?.session) {
+        sections.push({...section('session', claude.session, now, values),
+            kind: 'claude:session',
+            title: 'Claude — Session (5-hour window)'});
+    }
+    if (claude?.week) {
+        sections.push({...section('week', claude.week, now, values),
+            kind: 'claude:week', title: 'Claude — Week (all models)'});
+    }
+    for (const [index, entry] of (claude?.weekModel ?? []).entries()) {
+        sections.push({...section('weekModel', entry, now, values),
+            kind: `claude:model:${index}`,
+            title: `Claude · ${entry.model} — Week`});
+    }
+    for (const [index, window] of (codex?.windows ?? []).entries())
+        sections.push(codexSection(window, index, now, values));
+
+    const claudeConstraint = constraintOf(claude);
+    let codexConstraint = null;
+    for (const window of codex?.windows ?? []) {
+        if (codexConstraint === null || window.percent > codexConstraint.percent)
+            codexConstraint = window;
+    }
+    const unavailable = [];
+    if (claudeConstraint === null)
+        unavailable.push(['claude', claude]);
+    if (codexConstraint === null)
+        unavailable.push(['codex', codex]);
+
+    let notice = null;
+    if (unavailable.length === 1) {
+        notice = providerNotice(...unavailable[0]);
+    } else if (unavailable.length === 2) {
+        notice = {
+            headline: 'Claude and Codex usage data are unavailable.',
+            detail: 'Install or sign in to the provider clients, then refresh.',
+        };
+    }
+
+    const promoted = [];
+    if (claudeConstraint !== null &&
+        classify(claude, now, values) === LIMIT_HIT) {
+        promoted.push(`Claude ${promotedLine(
+            claudeConstraint, now, clock24).toLowerCase()}`);
+    }
+    if (codexConstraint !== null && codexConstraint.percent >= 100 &&
+        now - codex.fetchedAt <= staleAfterMs) {
+        const label = codexConstraint.limitName ?? 'Codex';
+        const reset = codexConstraint.resetsAt == null
+            ? ''
+            : ' — ' + formatResetRow(codexConstraint.resetsAt, now, {clock24})
+                .toLowerCase();
+        promoted.push(`${label} limit reached${reset}`);
+    }
+
+    const claudeUsable = claudeConstraint !== null;
+    const codexUsable = codexConstraint !== null;
+    const freshnessText = [
+        freshnessPart('claude', claude, now, values, claudeUsable),
+        freshnessPart('codex', codex, now, values, codexUsable),
+    ].join(' · ');
+    const stale = [
+        [claude, claudeUsable],
+        [codex, codexUsable],
+    ].some(([provider, usable]) => usable &&
+        now - provider.fetchedAt > staleAfterMs);
+
+    return {
+        promoted: promoted.length === 0 ? null : promoted.join('\n'),
+        notice,
+        sections,
+        footer: {freshnessText, stale},
+    };
+}
+
 export function menuModel(snapshot, now, opts = {}) {
+    if (snapshot?.providers !== undefined)
+        return multiProviderMenuModel(snapshot, now, opts);
     const {
         clock24 = true,
         warningAt = 80,

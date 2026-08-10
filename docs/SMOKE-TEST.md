@@ -1,4 +1,4 @@
-# Claudometer MVP Smoke Test
+# Claudometer Multi-provider Smoke Test
 
 The manual acceptance checklist for the MVP: `designs/USER-TASKS.md`
 UT-001/002/003 end to end, the surrounding lifecycle behaviors, and the
@@ -25,8 +25,10 @@ changes. From Eval:
 
 ```js
 const ext = Main.extensionManager.lookup('claudometer@illyayalovyy.github.io').stateObj;
-ext._source._config.filePath = '/tmp/claudometer-smoke/<state>.json';
-ext._source._config.refreshArgv = ['/bin/true'];   // or a fixture fake CLI
+ext._claudeSource._config.filePath = '/tmp/claudometer-smoke/<state>.json';
+ext._claudeSource._config.refreshArgv = ['/bin/true']; // or a fixture fake
+// For deterministic Codex states, replace ext._codexSource._fetcher with an
+// async function returning a prepared {fetchedAt, windows} or error snapshot.
 ext._scheduler.refreshNow();
 ```
 
@@ -48,32 +50,31 @@ tested so reruns test the same edge.
 
 ## A. UT-001 — glance at usage from the panel
 
-1. **Normal state, correct headline.** Feed a snapshot with session 27%,
-   week 34%, per-model week 17% (the committed fixture values). Expect:
-   gauge icon filled ~a third, label `34%` — the *highest* window
-   (constraint), not the session — theme foreground color, full opacity.
-2. **Warning threshold boundary.** Feed constraint exactly 80% (default
-   warning threshold). Expect: label `80%`, `!` overlay on the gauge,
-   warning color (`#f5c211` fallback). 79% must render as Normal.
-3. **Critical threshold boundary.** Feed constraint exactly 95%. Expect:
-   `!` overlay, error color (`#c01c28` fallback). 94% renders Warning.
-4. **Limit hit.** Feed constraint 100% with a `resets_at` ~1 h out.
-   Expect: hourglass icon (no meter), label is the countdown (`59 m`
-   style, not a percent), error color.
-5. **Display modes.** Set `indicator-style` to each value. `icon-only`:
-   no label in normal state, but the limit-hit countdown still shows
-   (UX-Q3 override). `percent-only`: no icon in normal state, but the
-   unavailable state still shows the slashed meter (only marker it has).
-6. **Headline pin.** Set `headline-metric` to `session` with the fixture
-   data. Expect the label to switch to the session window's 27% even
-   though the week is higher; `auto` returns to 34%.
+1. **Normal state, both provider constraints.** Feed Claude session 27%, week
+   34%, and Codex windows 25%/42%. Expect: spark + blue vertical meter at 34%,
+   then code-bracket mark + blue meter at 42%. No percentage labels.
+2. **Warning threshold boundary.** Feed either provider constraint exactly 80%
+   (default warning threshold). Expect its meter in warning color
+   (`#f5c211`); 79% must stay blue. The other provider is unchanged.
+3. **Critical threshold boundary.** Feed either provider constraint exactly
+   95%. Expect its meter in error color (`#c01c28`); 94% stays warning.
+4. **Limit hit.** Feed constraint 100% with a reset ~1 h out. Expect a full
+   error-color meter; the dropdown and accessible name carry the reset time.
+5. **Neutral symbols.** At 1× and 2× scale, verify the original eight-ray
+   spark and generic `</>` mark are crisp and distinguishable, with no vendor
+   logos or brand artwork.
+6. **Independent unavailable state.** Make Codex unavailable with healthy
+   Claude data, then reverse it. Expect only the unavailable provider pair to
+   dim and show a slashed empty meter.
 
 ## B. UT-002 — usage detail on demand
 
-7. **Menu layout.** Open the menu on full fixture data. Expect sections
-   in order: `Session (5-hour window)`, `Week — all models`,
-   `Week — <model>`; each with title row, progress bar + percent, reset
-   row; separators between; footer last. No settings gear.
+7. **Menu layout.** Open the menu on full fixture data. Expect provider-prefixed
+   Claude session/week/model sections, then general Codex and named model
+   bucket sections; each has title, progress bar + percent, reset row, and
+   separators. The footer reports both provider ages. At 1280×720, verify the
+   menu scrolls just enough to reach the footer instead of extending off-stage.
+   No settings gear.
 8. **Independent bar coloring.** Feed session 97% + week 34%. Expect only
    the session bar in error color; the week bar stays foreground.
 9. **Reset row formats.** A reset < 24 h away renders
@@ -104,11 +105,10 @@ tested so reruns test the same edge.
 
 ## C. UT-003 — unavailable and degraded states
 
-14. **Not installed.** Point `filePath` at a missing file and
-    `refreshArgv` at a missing binary. Expect: slashed-meter outline,
-    dimmed, *no label, no number anywhere*; menu shows "Claude Code was
-    not found on this system." + explainer, no freshness line, refresh
-    button still present.
+14. **Not installed.** Point the Claude file/argv at missing paths while Codex
+    remains healthy. Expect only Claude's pair dimmed with a slashed empty
+    meter; Codex remains filled. The menu keeps Codex rows and shows the
+    Claude-specific not-found notice; refresh remains present.
 15. **Signed out / unreadable.** Feed a well-formed file without
     `cachedUsageUtilization`. Expect: same indicator; menu shows "Can't
     read usage data." + "Open Claude Code and sign in, then refresh.",
@@ -118,8 +118,8 @@ tested so reruns test the same edge.
     refresh. Expect the normal rendering without disable/enable.
 17. **Stale.** Feed an old `fetchedAtMs` (older than 3× the refresh
     interval) with a failing refresh CLI (`exit-nonzero`). Expect:
-    indicator dimmed to 55% opacity but still showing the last percent
-    and meter; menu footer in warning color:
+    Claude's pair dimmed to 55% but still showing the last vertical fill and
+    threshold color; Codex stays fully opaque. The menu footer is warning:
     `Data is N min old — last refresh failed`.
 18. **G1 tripwire.** Point `refreshArgv` at a fake CLI emitting an
     envelope with nonzero token usage. Expect: one journal warning about
@@ -156,9 +156,9 @@ tested so reruns test the same edge.
     `12h`. Expect reset times as `5:00 PM` style in menu rows and the
     accessible name; `24h` gives `17:00`.
 25. **Preferences window.** Open prefs (Extensions app or
-    `gnome-extensions prefs`). Expect one page, three groups (Display /
-    Thresholds / Refresh); threshold spins enforce warning < critical
-    both ways.
+    `gnome-extensions prefs`). Expect one page with Thresholds and Refresh;
+    threshold spins enforce warning < critical both ways. No obsolete
+    indicator-style/headline controls.
 
 ## E. Accessibility (UX §8)
 
@@ -166,19 +166,18 @@ tested so reruns test the same edge.
     (Accerciser, or `Main.panel.statusArea[uuid].accessible_name` via
     Eval) in each state. Expect the full story, independent of display
     mode:
-    - normal: `Claude usage: 34 percent of weekly limit used, resets …`
-    - limit hit: `Claude usage: session limit reached, resets in …`
-    - stale: `… , data is N min old` (no reset clause)
-    - unavailable: `Claude usage data unavailable` (no number)
+    - normal: both `Claude usage: …` and `Codex usage: …` clauses
+    - stale: only the stale provider clause says `data is N min old`
+    - unavailable: only that provider says `usage data unavailable`
 27. **Keyboard-only operation.** Without a pointer: focus the indicator
     (Ctrl+Alt+Tab to the top bar in a real session, or `grab_key_focus()`
     headless), Enter/Space opens the menu, arrows walk the items, Enter
     on the footer row triggers refresh *without closing the menu*, Esc
     closes. The refresh button reads as `Refresh usage data`.
-28. **Monochrome legibility.** Compare warning/critical/limit-hit/
-    stale/unavailable screenshots ignoring hue: every state must remain
-    distinguishable by shape or text alone (`!` overlay, hourglass +
-    countdown, dimming, slash).
+28. **Monochrome legibility.** Compare normal/warning/critical/limit-hit/
+    stale/unavailable screenshots ignoring hue. Exact state remains available
+    in menu text/accessibility; stale uses dimming and unavailable uses a
+    slash, so neither relies on hue.
 
 ## Results
 
@@ -187,6 +186,7 @@ move older ones to the task/issue that ran them.
 
 | Executed | Commit | Items | Result |
 |---|---|---|---|
+| 2026-08-09 | working tree (RFC-002 implementation) | RFC-002 items 1, 5, 7, 19, 26 | PASS in GNOME Shell 49.9 headless: two symbols/meters rendered from live Claude+Codex data, five provider-prefixed menu windows rendered general-before-model, 720px overflow scrolled to a reachable footer, keyboard focus auto-scrolled the footer into view, combined accessible name present, clean enable/disable. Full release smoke remains required. |
 | 2026-07-26 | the commit carrying this table (task #14) | 1–28 | 25 PASS as written; 3 FAIL → fixed in the same commit and re-verified PASS (details below) |
 
 Execution notes (GNOME Shell 49.8, headless throwaway session per Setup;
