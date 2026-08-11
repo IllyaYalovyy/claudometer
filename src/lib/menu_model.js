@@ -226,12 +226,12 @@ function multiProviderMenuModel(snapshot, now, opts) {
     const groups = [{
         id: 'claude',
         title: 'Claude',
-        iconName: 'user-available-symbolic',
+        mark: 'claude',
         sections: claudeSections,
     }, {
         id: 'codex',
         title: 'Codex',
-        iconName: 'utilities-terminal-symbolic',
+        mark: 'codex',
         sections: codexSections,
     }].filter(group => group.sections.length > 0);
     const sections = groups.flatMap(group => group.sections);

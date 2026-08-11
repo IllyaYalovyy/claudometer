@@ -307,10 +307,10 @@ test('multi_provider_menu_lists_claude_and_every_codex_bucket_window', () => {
     }});
     assertEquals(m.groups.length, 2);
     assertEquals(m.groups[0].title, 'Claude');
-    assertEquals(m.groups[0].iconName, 'user-available-symbolic');
+    assertEquals(m.groups[0].mark, 'claude');
     assertEquals(m.groups[0].sections.length, 2);
     assertEquals(m.groups[1].title, 'Codex');
-    assertEquals(m.groups[1].iconName, 'utilities-terminal-symbolic');
+    assertEquals(m.groups[1].mark, 'codex');
     assertEquals(m.groups[1].sections.length, 2);
     assertEquals(m.sections.length, 4);
     assertEquals(m.sections[0].providerName, 'Claude');

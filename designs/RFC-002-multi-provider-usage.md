@@ -153,20 +153,20 @@ is sent.
 
 ### Panel representation
 
-The panel renders one 16 px generic symbol plus one 6×16 px vertical meter per
+The panel renders one 16 px original symbol plus one 9×16 px vertical meter per
 available provider, matching the density and rhythm of the supplied reference.
 
-- Claude: the system chat symbolic icon.
-- Codex: the system terminal symbolic icon.
+- Claude: a warm six-ray bloom that evokes Claude without copying its logo.
+- Codex: a teal six-node neural ring that evokes Codex without copying its logo.
 - Meter: low-opacity outline/track with used quota filled from bottom. Normal
   uses the Shell accent color; warning and critical use theme warning/error
   colors. Stale/unavailable states are also encoded by opacity and a slash, so
   color is never the sole signal.
 
-The icons are generic theme assets, not provider artwork. Reusing them beside
-the dropdown's provider headings teaches the association. Each panel unit has
-a fixed 25 px allocation and the combined provider strip remains 58 px wide in
-every data state.
+The marks are original Cairo geometry, not bundled provider artwork. Reusing
+them beside dropdown headings teaches the association. Each panel unit has a
+fixed 29 px allocation; a 4 px internal gap and 12 px inter-provider gap make
+ownership clear. The combined provider strip remains 70 px in every state.
 
 The fill always represents the provider's highest used percentage. The old
 single-indicator style and headline pin settings remain in the schema for safe
@@ -182,7 +182,8 @@ window-duration label. The viewport is fixed at 300 px wide and every dynamic
 label ellipsizes, so values cannot resize the popup. Provider notices remain
 independent: if Codex is missing, Claude rows still render and the menu
 explains only the Codex problem. The footer summarizes freshness for both
-providers and its refresh button updates both.
+providers and its refresh button updates both. Explicit vertical margins and
+padding keep adjacent quota blocks visually separate.
 
 ## Testing Strategy
 
