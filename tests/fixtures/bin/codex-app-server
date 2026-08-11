@@ -1,0 +1,33 @@
+#!/bin/sh
+# Fake Codex App Server for fetcher tests. Consume the initialization,
+# initialized notification, and rate-limit request before producing a result,
+# matching the real server's stdio ordering and keeping stdin open until the
+# client's complete request has arrived.
+request_lines=0
+while [ "${request_lines}" -lt 3 ]; do
+    IFS= read -r _request || exit 4
+    request_lines=$((request_lines + 1))
+done
+
+mode=$1
+shift
+case "${mode}" in
+    emit-file)
+        exec cat "$1"
+        ;;
+    emit-garbage)
+        printf 'not-json{{{'
+        ;;
+    exit-nonzero)
+        printf '%s\n' 'simulated App Server failure' >&2
+        exit 3
+        ;;
+    hang)
+        printf '%s\n' "$$" > "$1"
+        exec sleep 600
+        ;;
+    *)
+        printf 'unknown fake App Server mode: %s\n' "${mode}" >&2
+        exit 2
+        ;;
+esac
