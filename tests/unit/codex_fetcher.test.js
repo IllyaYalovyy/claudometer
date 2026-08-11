@@ -9,10 +9,7 @@ import {
 import {NOT_INSTALLED} from '../../src/lib/snapshot.js';
 
 const RESPONSE = 'tests/fixtures/codex-app-server-response.json';
-const EMIT_FILE = 'tests/fixtures/bin/emit-file';
-const EMIT_GARBAGE = 'tests/fixtures/bin/emit-garbage';
-const EXIT_NONZERO = 'tests/fixtures/bin/exit-nonzero';
-const HANG = 'tests/fixtures/bin/hang';
+const APP_SERVER = 'tests/fixtures/bin/codex-app-server';
 const NOW = 1786327200000;
 const tmpDir = GLib.Dir.make_tmp('claudometer-codex-fetcher-XXXXXX');
 const tmpFiles = [];
@@ -32,7 +29,7 @@ test('default_config_uses_the_documented_app_server_command', () => {
 
 test('reads_the_matching_rate_limit_response_and_reaps_the_server', async () => {
     const snap = await fetchCodexSnapshot({
-        appServerArgv: [EMIT_FILE, RESPONSE], timeoutMs: 5000,
+        appServerArgv: [APP_SERVER, 'emit-file', RESPONSE], timeoutMs: 5000,
     }, NOW);
     assertEquals('error' in snap, false);
     assertEquals(snap.windows.length, 2);
@@ -49,13 +46,13 @@ test('missing_codex_is_an_explicit_not_installed_snapshot', async () => {
 
 test('garbage_and_early_exit_are_resolved_failures', async () => {
     const garbage = await fetchCodexSnapshot({
-        appServerArgv: [EMIT_GARBAGE], timeoutMs: 5000,
+        appServerArgv: [APP_SERVER, 'emit-garbage'], timeoutMs: 5000,
     }, NOW);
     assertEquals(garbage.error, CODEX_READ_FAILED);
     assertEquals(garbage.reason, 'bad-json');
 
     const exited = await fetchCodexSnapshot({
-        appServerArgv: [EXIT_NONZERO], timeoutMs: 5000,
+        appServerArgv: [APP_SERVER, 'exit-nonzero'], timeoutMs: 5000,
     }, NOW);
     assertEquals(exited.error, CODEX_READ_FAILED);
     assertEquals(exited.reason, 'early-eof');
@@ -64,7 +61,7 @@ test('garbage_and_early_exit_are_resolved_failures', async () => {
 test('hung_server_is_killed_and_reaped_at_timeout', async () => {
     const pidFile = tmpPath('hung.pid');
     const snap = await fetchCodexSnapshot({
-        appServerArgv: [HANG, pidFile], timeoutMs: 25,
+        appServerArgv: [APP_SERVER, 'hang', pidFile], timeoutMs: 25,
     }, NOW);
     assertEquals(snap.error, CODEX_READ_FAILED);
     assertEquals(snap.reason, 'timeout');
