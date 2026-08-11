@@ -14,6 +14,7 @@ import {Spinner} from 'resource:///org/gnome/shell/ui/animation.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {menuModel} from './lib/menu_model.js';
+import {ProviderMark} from './provider_meter.js';
 
 // §4.2: ~6 px tall bar, logical pixels (scaled for HiDPI by the widget).
 const BAR_HEIGHT = 6;
@@ -149,7 +150,7 @@ function noticeLabel(styleClass) {
 
 function modelGroups(model) {
     return model.groups ?? [{
-        id: 'legacy', title: null, iconName: null, sections: model.sections,
+        id: 'legacy', title: null, mark: null, sections: model.sections,
     }];
 }
 
@@ -321,11 +322,7 @@ export class ClaudometerMenu {
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        box.add_child(new St.Icon({
-            icon_name: group.iconName,
-            icon_size: 16,
-            style_class: 'popup-menu-icon',
-        }));
+        box.add_child(new ProviderMark(group.mark));
         const heading = label(group.title, 'claudometer-provider-heading-label');
         heading.x_expand = false;
         box.add_child(heading);

@@ -258,7 +258,7 @@ test('accessible_name_honors_the_12_hour_clock_option', () => {
         'resets in 1 h 12 m (5:00 PM)');
 });
 
-test('multi_provider_panel_has_one_fixed_icon_meter_item_per_provider', () => {
+test('multi_provider_panel_has_one_fixed_mark_meter_item_per_provider', () => {
     const snapshot = {providers: {
         claude: {
             fetchedAt: NOW,
@@ -274,10 +274,10 @@ test('multi_provider_panel_has_one_fixed_icon_meter_item_per_provider', () => {
         headlineMetric: 'session'});
     assertEquals(m.items.length, 2);
     assertEquals(m.items[0].id, 'claude');
-    assertEquals(m.items[0].iconName, 'user-available-symbolic');
+    assertEquals(m.items[0].mark, 'claude');
     assertEquals(m.items[0].percent, 67);
     assertEquals(m.items[1].id, 'codex');
-    assertEquals(m.items[1].iconName, 'utilities-terminal-symbolic');
+    assertEquals(m.items[1].mark, 'codex');
     assertEquals(m.items[1].percent, 84);
     assertEquals(m.items[1].state, 'warning');
     assertEquals(m.items[1].meterState, 'warning');

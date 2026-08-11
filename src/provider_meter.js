@@ -1,10 +1,12 @@
-// RFC-002 compact vertical quota meter. Provider identity uses generic system
-// symbolic icons in indicator.js; this file draws only the fixed-size fill.
+// RFC-002 compact provider marks and vertical quota meter. Both marks are
+// original geometry rather than copied vendor logos: a warm six-ray bloom for
+// Claude and a six-node neural ring for Codex.
 import Cairo from 'cairo';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
-const METER_WIDTH = 6;
+const MARK_SIZE = 16;
+const METER_WIDTH = 9;
 const METER_HEIGHT = 16;
 
 const MeterDrawingArea = GObject.registerClass(
@@ -18,6 +20,72 @@ class MeterDrawingArea extends St.DrawingArea {
 
     _onDestroy() {
         this.disconnect(this._styleChangedId);
+    }
+});
+
+export const ProviderMark = GObject.registerClass(
+class ProviderMark extends MeterDrawingArea {
+    _init(mark) {
+        super._init({style_class: 'claudometer-provider-mark ' +
+            `claudometer-provider-mark-${mark}`});
+        this._mark = mark;
+        this.set_size(MARK_SIZE, MARK_SIZE);
+    }
+
+    vfunc_repaint() {
+        const cr = this.get_context();
+        try {
+            const [width, height] = this.get_surface_size();
+            const size = Math.min(width, height);
+            if (size <= 0)
+                return;
+            cr.translate((width - size) / 2, (height - size) / 2);
+            const color = this.get_theme_node().get_foreground_color();
+            cr.setSourceRGBA(color.red / 255, color.green / 255,
+                color.blue / 255, color.alpha / 255);
+            if (this._mark === 'claude')
+                this._paintClaude(cr, size);
+            else
+                this._paintCodex(cr, size);
+        } finally {
+            cr.$dispose();
+        }
+    }
+
+    _paintClaude(cr, size) {
+        const center = size / 2;
+        const inner = size * 0.11;
+        const outer = size * 0.39;
+        cr.setLineWidth(size * 0.145);
+        cr.setLineCap(Cairo.LineCap.ROUND);
+        for (let i = 0; i < 6; i++) {
+            const angle = i * Math.PI / 3;
+            cr.moveTo(center + Math.cos(angle) * inner,
+                center + Math.sin(angle) * inner);
+            cr.lineTo(center + Math.cos(angle) * outer,
+                center + Math.sin(angle) * outer);
+        }
+        cr.stroke();
+        cr.arc(center, center, size * 0.09, 0, 2 * Math.PI);
+        cr.fill();
+    }
+
+    _paintCodex(cr, size) {
+        const center = size / 2;
+        const ring = size * 0.29;
+        const node = size * 0.072;
+        cr.setLineWidth(size * 0.085);
+        cr.arc(center, center, ring, 0, 2 * Math.PI);
+        cr.stroke();
+        for (let i = 0; i < 6; i++) {
+            const angle = i * Math.PI / 3 - Math.PI / 2;
+            cr.arc(center + Math.cos(angle) * ring,
+                center + Math.sin(angle) * ring,
+                node, 0, 2 * Math.PI);
+            cr.fill();
+        }
+        cr.arc(center, center, size * 0.075, 0, 2 * Math.PI);
+        cr.fill();
     }
 });
 
@@ -66,12 +134,12 @@ class VerticalUsageMeter extends MeterDrawingArea {
             const h = height - 2 * inset;
             const radius = Math.min(w / 2, inset * 1.35);
 
-            cr.setSourceRGBA(...rgb, alpha * 0.24);
+            cr.setSourceRGBA(...rgb, alpha * 0.40);
             this._roundRect(cr, x, y, w, h, radius);
             cr.fill();
 
             if (this._percent !== null && this._percent > 0) {
-                const fillHeight = Math.max(w, h * this._percent / 100);
+                const fillHeight = Math.max(2, h * this._percent / 100);
                 cr.setSourceRGBA(...rgb, alpha);
                 this._roundRect(cr, x, y + h - fillHeight, w, fillHeight,
                     Math.min(radius, fillHeight / 2));

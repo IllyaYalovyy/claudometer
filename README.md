@@ -6,9 +6,10 @@ starting a model turn to check.
 
 ## What it shows
 
-- Two compact symbol-and-meter pairs in the top panel: a generic chat symbol
-  for Claude and terminal symbol for Codex. Each vertical meter shows the
-  provider's most constrained window; their combined width is fixed.
+- Two compact symbol-and-meter pairs in the top panel: an original warm bloom
+  evoking Claude and an original teal neural ring evoking Codex. Each wider
+  vertical meter shows the provider's most constrained window; their combined
+  width is fixed.
 - A dropdown with every Claude and Codex window, including model-specific
   buckets, grouped under one heading per provider. Its width is fixed and
   long model names are shortened rather than resizing the popup.

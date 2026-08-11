@@ -11,7 +11,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {GaugeIcon} from './gauge.js';
 import {indicatorModel} from './lib/indicator_model.js';
-import {VerticalUsageMeter} from './provider_meter.js';
+import {ProviderMark, VerticalUsageMeter} from './provider_meter.js';
 
 export const ClaudometerIndicator = GObject.registerClass(
 class ClaudometerIndicator extends PanelMenu.Button {
@@ -88,11 +88,7 @@ class ClaudometerIndicator extends PanelMenu.Button {
                     style_class: 'claudometer-provider-item',
                     y_align: Clutter.ActorAlign.CENTER,
                 });
-                const icon = new St.Icon({
-                    icon_name: model.iconName,
-                    icon_size: 16,
-                    style_class: 'system-status-icon',
-                });
+                const icon = new ProviderMark(model.mark);
                 const meter = new VerticalUsageMeter();
                 actor.add_child(icon);
                 actor.add_child(meter);

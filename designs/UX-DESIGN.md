@@ -63,19 +63,21 @@ determines when you stop working.
 
 ```
 ┌─────────────────────────────┐
-│  [chat] ▮   [terminal] ▮    │   fixed provider icon + used meter
+│  [bloom] ▮   [nodes] ▮      │   fixed provider mark + used meter
 └─────────────────────────────┘
 ```
 
-- **Provider symbols:** generic theme-provided symbolic icons, not vendor
-  artwork. Claude uses the system chat symbol; Codex uses the system terminal
-  symbol. The dropdown repeats these beside the provider headings so their
-  meaning does not rely on guesswork.
-- **Meters:** one narrow 6×16 px vertical track beside each 16 px symbol,
+- **Provider symbols:** original Cairo geometry, not copied vendor artwork.
+  Claude uses a warm six-ray bloom; Codex uses a teal six-node neural ring.
+  Their color and silhouette evoke the providers while remaining distinct
+  original marks. The dropdown repeats them beside provider headings.
+- **Meters:** one 9×16 px vertical track beside each 16 px symbol,
   filled from bottom to the provider constraint's percent used. Normal fill
-  uses GNOME blue; warning/error use the configured state colors.
-- **Fixed representation:** each icon/meter unit is 25 px and the pair is 58
-  px total. No panel percentage label and no display-mode or headline pin.
+  uses GNOME blue; warning/error use the configured state colors. The empty
+  track remains visible at 40% opacity so icon/meter ownership is clear.
+- **Fixed representation:** each mark/meter unit is 29 px and the pair is 70
+  px total. The internal gap is 4 px versus 12 px between providers, making
+  the two units unambiguous. No percentage label or display-mode/headline pin.
   Loading, stale, and unavailable transitions never resize the panel button.
 
 ### 3.2 Placement
@@ -151,7 +153,8 @@ distinguishes model-specific buckets. Dynamic labels are capped at 24 Unicode
 characters and visually ellipsized as a second line of defense. The viewport
 is fixed at 300 px wide (or reduced only to fit a narrower stage), so data can
 never resize it. If natural height exceeds the stage, content scrolls while
-the refresh footer remains reachable.
+the refresh footer remains reachable. Every quota block has explicit vertical
+margins and padding; adjacent model titles and reset rows never touch.
 
 ### 4.2 Progress bars
 

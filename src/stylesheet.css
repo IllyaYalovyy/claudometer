@@ -63,12 +63,14 @@
 }
 
 .claudometer-usage-section-item {
-    padding-top: 5px;
-    padding-bottom: 7px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    padding-top: 7px;
+    padding-bottom: 11px;
 }
 
 .claudometer-usage-section {
-    spacing: 6px;
+    spacing: 7px;
 }
 
 .claudometer-section-title {
@@ -80,17 +82,25 @@
     text-align: right;
 }
 
-/* RFC-002 panel: repeated generic system icon + vertical-used-meter pairs.
+/* RFC-002 panel: repeated original provider mark + vertical-used-meter pairs.
  * Every item has the same fixed allocation, so loading/error transitions can
  * never make the panel button breathe horizontally. */
 
 .claudometer-provider-list {
-    spacing: 8px;
+    spacing: 12px;
 }
 
 .claudometer-provider-item {
-    spacing: 3px;
-    width: 25px;
+    spacing: 4px;
+    width: 29px;
+}
+
+.claudometer-provider-mark-claude {
+    color: #d97757;
+}
+
+.claudometer-provider-mark-codex {
+    color: #10a37f;
 }
 
 .claudometer-provider-meter {

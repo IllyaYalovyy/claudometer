@@ -47,12 +47,12 @@ const PROVIDERS = [
     {
         id: 'claude',
         name: 'Claude',
-        iconName: 'user-available-symbolic',
+        mark: 'claude',
     },
     {
         id: 'codex',
         name: 'Codex',
-        iconName: 'utilities-terminal-symbolic',
+        mark: 'codex',
     },
 ];
 
