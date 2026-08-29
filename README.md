@@ -1,5 +1,7 @@
 # Claudometer
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-IllyaYalovyy-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/IllyaYalovyy)
+
 A GNOME Shell extension that shows Claude Code and Codex usage in the top
 panel — how close each provider is to its current rate limits — without ever
 starting a model turn to check.
