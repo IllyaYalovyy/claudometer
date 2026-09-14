@@ -10,11 +10,12 @@ starting a model turn to check.
 
 - Two compact symbol-and-meter pairs in the top panel: an original warm bloom
   evoking Claude and an original teal neural ring evoking Codex. Each wider
-  vertical meter shows the provider's most constrained window; their combined
-  width is fixed.
+  vertical meter shows the relevant provider constraint (Claude overall,
+  Codex main included usage); their combined width is fixed.
 - A dropdown with every Claude and Codex window, including model-specific
-  buckets, grouped under one heading per provider. Its width is fixed and
-  long model names are shortened rather than resizing the popup.
+  buckets. Providers and Codex models are named once above their own rows.
+  Its width is fixed and long model names are shortened rather than resizing
+  the popup.
 - A preferences window for alert thresholds and refresh cadence. Panel
   position and the compact representation are deliberately fixed.
 
@@ -68,24 +69,27 @@ manual testing, reading logs), see `docs/DEVELOPING.md`.
 ## Using Claudometer
 
 Once enabled, the two compact meters appear in the top panel and need no
-setup. Claudometer polls each installed provider every minute; each meter
-shows whichever of that provider's rate-limit windows has the highest usage.
+setup. Claudometer polls each installed provider every minute. Claude's meter
+shows its highest usage window; Codex's shows only the main included-usage
+bucket, so a separately metered model such as Spark cannot make all Codex usage
+look blocked.
 
 **What the indicator states mean:**
 
 | You see | Meaning |
 |---|---|
-| Blue vertical fill | Normal — the fill is the provider's highest percent used |
+| Blue vertical fill | Normal — Claude's highest percent or Codex's main included-usage percent |
 | Yellow fill | Warning — 80% used (threshold configurable) |
-| Red fill | Critical or limit reached — 95% or more used |
+| Red fill | Critical at 95%+, or an explicit backend reached/blocked state |
 | Dimmed symbol and meter | That provider's last known data is stale |
 | Dimmed slashed empty meter | That provider is unavailable; the other remains independent |
 
 **Click the meters** for detail: compact Claude and Codex groups contain one
-section per quota window with a progress bar and reset time, plus a footer
-showing freshness for both providers and a manual refresh button. The
-menu is fully keyboard-operable (arrows, Enter on the footer refreshes,
-Esc closes).
+section per quota window with a progress bar and reset time. Codex model names
+are grouped above their duration rows, and any available rate-limit resets are
+shown once as quiet read-only metadata. A footer shows freshness for both
+providers and a manual refresh button. The menu is fully keyboard-operable
+(arrows, Enter on the footer refreshes, Esc closes).
 
 **Preferences** (Extensions app → Claudometer → settings, or
 `gnome-extensions prefs claudometer@illyayalovyy.github.io`):

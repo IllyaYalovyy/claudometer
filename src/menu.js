@@ -151,6 +151,7 @@ function noticeLabel(styleClass) {
 function modelGroups(model) {
     return model.groups ?? [{
         id: 'legacy', title: null, mark: null, sections: model.sections,
+        note: null,
     }];
 }
 
@@ -174,6 +175,7 @@ export class ClaudometerMenu {
         this._opts = {};
         this._structureKey = null;
         this._rows = [];
+        this._groupNotes = new Map();
         this._promotedLabel = null;
         this._noticeHeadline = null;
         this._noticeDetail = null;
@@ -222,6 +224,7 @@ export class ClaudometerMenu {
         this._menu = null;
         this._scheduler = null;
         this._rows = [];
+        this._groupNotes.clear();
         this._promotedLabel = null;
         this._noticeHeadline = null;
         this._noticeDetail = null;
@@ -249,9 +252,10 @@ export class ClaudometerMenu {
         const key = (model.promoted === null ? '' : 'promoted|') +
             (model.notice === null ? '' : 'notice|') +
             modelGroups(model)
-                .map(group => `${group.id}[${group.sections
-                    .map(s => `${s.kind}:${s.resetText === null ? 0 : 1}`)
-                    .join(',')}]`)
+                .map(group => `${group.id}[${group.sections.map(s =>
+                    `${s.kind}:${s.bucketTitle ?? ''}:` +
+                    `${s.resetText === null ? 0 : 1}`).join(',')}]` +
+                    `:${group.note == null ? 0 : 1}`)
                 .join('|');
         if (key !== this._structureKey) {
             this._structureKey = key;
@@ -272,6 +276,11 @@ export class ClaudometerMenu {
                 row.resetLabel.text = section.resetText;
             row.item.accessible_name = this._sectionAccessibleName(section);
         });
+        for (const group of modelGroups(model)) {
+            const note = this._groupNotes.get(group.id);
+            if (note !== undefined)
+                note.text = group.note;
+        }
         this._updateFooter(model.footer);
     }
 
@@ -280,6 +289,7 @@ export class ClaudometerMenu {
         this._promotedLabel = null;
         this._noticeHeadline = null;
         this._noticeDetail = null;
+        this._groupNotes.clear();
         // §4.5 limit-hit promotion: the first line of the menu.
         if (model.promoted !== null) {
             this._promotedLabel = noticeLabel('claudometer-limit-promoted');
@@ -302,8 +312,13 @@ export class ClaudometerMenu {
                 this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             if (group.title !== null)
                 this._addGroupHeading(group);
-            this._rows.push(...group.sections.map(
-                section => this._addSection(section)));
+            for (const section of group.sections) {
+                if (section.bucketTitle != null)
+                    this._addBucketHeading(section.bucketTitle);
+                this._rows.push(this._addSection(section));
+            }
+            if (group.note != null)
+                this._groupNotes.set(group.id, this._addGroupNote(group.note));
         });
         if (this._rows.length > 0)
             this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -329,6 +344,32 @@ export class ClaudometerMenu {
         item.add_child(box);
         item.label_actor = heading;
         this._menu.addMenuItem(item);
+    }
+
+    _addBucketHeading(text) {
+        const item = new PopupMenu.PopupBaseMenuItem({
+            reactive: false,
+            can_focus: false,
+        });
+        item.add_style_class_name('claudometer-bucket-heading-item');
+        const heading = label(text, 'claudometer-bucket-heading');
+        item.add_child(heading);
+        item.label_actor = heading;
+        this._menu.addMenuItem(item);
+    }
+
+    _addGroupNote(text) {
+        const item = new PopupMenu.PopupBaseMenuItem({
+            reactive: false,
+            can_focus: false,
+        });
+        item.add_style_class_name('claudometer-provider-note-item');
+        const note = label(text, 'claudometer-provider-note');
+        note.opacity = 180;
+        item.add_child(note);
+        item.label_actor = note;
+        this._menu.addMenuItem(item);
+        return note;
     }
 
     // §4.1 section: one compact focusable block containing the title, bar,
@@ -369,10 +410,8 @@ export class ClaudometerMenu {
     }
 
     _sectionAccessibleName(section) {
-        const title = section.providerName === undefined
-            ? section.title
-            : `${section.providerName}, ${section.title}`;
-        return [title, section.percentText, section.resetText]
+        return [section.providerName, section.bucketName, section.title,
+            section.percentText, section.resetText]
             .filter(Boolean).join(', ');
     }
 

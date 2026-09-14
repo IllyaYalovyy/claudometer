@@ -32,7 +32,10 @@ test('reads_the_matching_rate_limit_response_and_reaps_the_server', async () => 
         appServerArgv: [APP_SERVER, 'emit-file', RESPONSE], timeoutMs: 5000,
     }, NOW);
     assertEquals('error' in snap, false);
-    assertEquals(snap.windows.length, 2);
+    assertEquals(snap.mainLimitId, 'codex');
+    assertEquals(snap.ordinaryUsageAllowed, true);
+    assertEquals(snap.resetCreditsAvailable, 2);
+    assertEquals(snap.windows.length, 3);
     assertEquals(snap.windows[1].limitName, 'GPT-5.3-Codex-Spark');
 });
 

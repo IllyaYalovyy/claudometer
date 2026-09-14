@@ -285,6 +285,77 @@ test('multi_provider_panel_has_one_fixed_mark_meter_item_per_provider', () => {
     assertEquals(m.accessibleName.includes('Codex usage: 84 percent used'), true);
 });
 
+test('specialized_codex_limits_never_take_over_the_main_meter', () => {
+    const snapshot = {providers: {
+        claude: {fetchedAt: NOW, session: {percent: 20}},
+        codex: {
+            fetchedAt: NOW,
+            mainLimitId: 'codex',
+            ordinaryUsageAllowed: true,
+            windows: [{
+                limitId: 'codex', slot: 'primary', percent: 31,
+                durationMins: 10080, resetsAt: RESET,
+            }, {
+                limitId: 'codex_spark', limitName: 'GPT-5.3-Codex-Spark',
+                slot: 'primary', percent: 100, durationMins: 300,
+                resetsAt: RESET,
+            }],
+        },
+    }};
+    const codex = model(snapshot).items[1];
+    assertEquals(codex.percent, 31);
+    assertEquals(codex.state, 'normal');
+    assertEquals(codex.accessibleName.includes('31 percent used'), true);
+});
+
+test('authoritative_codex_access_and_reached_states_override_percent', () => {
+    const base = {
+        fetchedAt: NOW,
+        mainLimitId: 'codex',
+        windows: [{
+            limitId: 'codex', slot: 'primary', percent: 31,
+            durationMins: 10080, resetsAt: RESET,
+        }],
+    };
+    let codex = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 20}},
+        codex: {...base, ordinaryUsageAllowed: false},
+    }}).items[1];
+    assertEquals(codex.percent, 31, 'reported fill remains honest');
+    assertEquals(codex.state, 'limit-hit');
+    assertEquals(codex.meterState, 'limit-hit');
+    assertEquals(codex.accessibleName, 'Codex included usage unavailable');
+
+    codex = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 20}},
+        codex: {...base, ordinaryUsageAllowed: true, windows: [{
+            ...base.windows[0], reachedType: 'rate_limit_reached',
+        }]},
+    }}).items[1];
+    assertEquals(codex.state, 'limit-hit');
+    assertEquals(codex.accessibleName,
+        'Codex included usage limit reached, resets in 1 h 12 m (17:00)');
+
+    codex = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 20}},
+        codex: {...base, ordinaryUsageAllowed: true, windows: [{
+            ...base.windows[0],
+            reachedType: 'workspace_member_credits_depleted',
+        }]},
+    }}).items[1];
+    assertEquals(codex.state, 'limit-hit');
+    assertEquals(codex.accessibleName, 'Codex workspace credits depleted',
+        'workspace controls do not promise recovery at a quota reset');
+
+    codex = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 20}},
+        codex: {...base, ordinaryUsageAllowed: null},
+    }}).items[1];
+    assertEquals(codex.percent, null);
+    assertEquals(codex.state, 'unavailable');
+    assertEquals(codex.accessibleName, 'Codex access status unavailable');
+});
+
 test('stale_provider_dims_but_keeps_the_underlying_threshold_meter_color', () => {
     const m = model({providers: {
         claude: {fetchedAt: NOW - 10 * MIN, session: {percent: 100}},

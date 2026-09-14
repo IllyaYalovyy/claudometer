@@ -75,12 +75,37 @@ function resetClause(constraint, now, clock24) {
 }
 
 function codexConstraint(snapshot) {
+    const windows = snapshot?.windows ?? [];
+    const mainLimitId = snapshot?.mainLimitId ??
+        windows.find(window => window.limitId === 'codex')?.limitId ??
+        windows.find(window => window.limitName === undefined)?.limitId ?? null;
     let constraint = null;
-    for (const window of snapshot?.windows ?? []) {
+    for (const window of windows) {
+        if (window.limitId !== mainLimitId)
+            continue;
         if (constraint === null || window.percent > constraint.percent)
             constraint = window;
     }
     return constraint;
+}
+
+function codexAccessUnknown(snapshot) {
+    return snapshot !== null && typeof snapshot === 'object' &&
+        Object.hasOwn(snapshot, 'ordinaryUsageAllowed') &&
+        snapshot.ordinaryUsageAllowed === null;
+}
+
+function codexReachedDescription(snapshot, constraint) {
+    if (snapshot?.ordinaryUsageAllowed === false &&
+        typeof constraint?.reachedType !== 'string')
+        return 'included usage unavailable';
+    if (constraint?.reachedType === 'workspace_owner_credits_depleted' ||
+        constraint?.reachedType === 'workspace_member_credits_depleted')
+        return 'workspace credits depleted';
+    if (constraint?.reachedType === 'workspace_owner_usage_limit_reached' ||
+        constraint?.reachedType === 'workspace_member_usage_limit_reached')
+        return 'workspace usage limit reached';
+    return 'included usage limit reached';
 }
 
 function providerItem(provider, snapshot, now, opts) {
@@ -89,14 +114,21 @@ function providerItem(provider, snapshot, now, opts) {
         criticalAt = 95,
         staleAfterMs = 3 * 60000,
     } = opts;
-    const constraint = provider.id === 'claude'
-        ? constraintOf(snapshot)
-        : codexConstraint(snapshot);
+    const isCodex = provider.id === 'codex';
+    const accessUnknown = isCodex && codexAccessUnknown(snapshot);
+    const constraint = accessUnknown
+        ? null
+        : isCodex ? codexConstraint(snapshot) : constraintOf(snapshot);
+    const authoritativeReached = isCodex && constraint !== null &&
+        (snapshot?.ordinaryUsageAllowed === false ||
+         typeof constraint.reachedType === 'string');
     let state;
     if (constraint === null) {
         state = UNAVAILABLE;
     } else if (now - snapshot.fetchedAt > staleAfterMs) {
         state = STALE;
+    } else if (authoritativeReached) {
+        state = LIMIT_HIT;
     } else if (constraint.percent >= 100) {
         state = LIMIT_HIT;
     } else if (constraint.percent >= criticalAt) {
@@ -115,13 +147,15 @@ function providerItem(provider, snapshot, now, opts) {
             meterState: UNAVAILABLE,
             styleClass: 'claudometer-provider-unavailable',
             opacity: DIM_OPACITY,
-            accessibleName: `${provider.name} usage data unavailable`,
+            accessibleName: accessUnknown
+                ? `${provider.name} access status unavailable`
+                : `${provider.name} usage data unavailable`,
         };
     }
 
     let meterState = state;
     if (state === STALE) {
-        if (constraint.percent >= 100)
+        if (authoritativeReached || constraint.percent >= 100)
             meterState = LIMIT_HIT;
         else if (constraint.percent >= criticalAt)
             meterState = CRITICAL;
@@ -131,12 +165,30 @@ function providerItem(provider, snapshot, now, opts) {
             meterState = NORMAL;
     }
 
-    let accessibleName = `${provider.name} usage: ` +
-        `${Math.round(constraint.percent)} percent used`;
-    if (state === STALE)
+    let accessibleName;
+    if (state === STALE) {
+        accessibleName = `${provider.name} usage: ` +
+            `${Math.round(constraint.percent)} percent used`;
         accessibleName += `, data is ${formatAge(now - snapshot.fetchedAt)} old`;
-    else if (constraint.resetsAt != null)
-        accessibleName += resetClause(constraint, now, opts.clock24 ?? true);
+    } else if (state === LIMIT_HIT) {
+        accessibleName = `${provider.name} ` +
+            (isCodex
+                ? codexReachedDescription(snapshot, constraint)
+                : 'usage limit reached');
+        const resetIsAuthoritative = !isCodex ||
+            constraint.reachedType === 'rate_limit_reached' ||
+            (constraint.reachedType === undefined &&
+             snapshot?.ordinaryUsageAllowed !== false);
+        if (resetIsAuthoritative && constraint.resetsAt != null)
+            accessibleName += resetClause(constraint, now,
+                opts.clock24 ?? true);
+    } else {
+        accessibleName = `${provider.name} usage: ` +
+            `${Math.round(constraint.percent)} percent used`;
+        if (constraint.resetsAt != null)
+            accessibleName += resetClause(constraint, now,
+                opts.clock24 ?? true);
+    }
     return {
         ...provider,
         percent: constraint.percent,

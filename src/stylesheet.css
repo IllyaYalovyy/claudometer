@@ -62,6 +62,20 @@
     font-weight: bold;
 }
 
+.claudometer-bucket-heading-item {
+    padding-top: 8px;
+    padding-bottom: 0;
+}
+
+.claudometer-bucket-heading {
+    font-weight: 600;
+}
+
+.claudometer-provider-note-item {
+    padding-top: 2px;
+    padding-bottom: 7px;
+}
+
 .claudometer-usage-section-item {
     margin-top: 2px;
     margin-bottom: 2px;
