@@ -1,9 +1,11 @@
 {
+  "ordinaryUsageAllowed": true,
   "rateLimits": {
     "limitId": "codex",
     "limitName": null,
+    "rateLimitReachedType": null,
     "primary": {
-      "usedPercent": 0,
+      "usedPercent": 31,
       "windowDurationMins": 10080,
       "resetsAt": 1786930515
     },
@@ -13,22 +15,32 @@
     "codex_bengalfox": {
       "limitId": "codex_bengalfox",
       "limitName": "GPT-5.3-Codex-Spark",
+      "rateLimitReachedType": null,
       "primary": {
-        "usedPercent": 0,
+        "usedPercent": 12,
+        "windowDurationMins": 300,
+        "resetsAt": 1786498515
+      },
+      "secondary": {
+        "usedPercent": 18,
         "windowDurationMins": 10080,
         "resetsAt": 1786929839
-      },
-      "secondary": null
+      }
     },
     "codex": {
       "limitId": "codex",
       "limitName": null,
+      "rateLimitReachedType": null,
       "primary": {
-        "usedPercent": 0,
+        "usedPercent": 31,
         "windowDurationMins": 10080,
         "resetsAt": 1786930515
       },
       "secondary": null
     }
+  },
+  "rateLimitResetCredits": {
+    "availableCount": 2,
+    "credits": null
   }
 }

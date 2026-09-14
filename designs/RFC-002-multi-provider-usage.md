@@ -16,10 +16,28 @@ local-cache/zero-model refresh path. Codex usage is read through the documented
 Codex App Server `account/rateLimits/read` method, which exposes quota usage,
 window duration, and reset time without starting a model turn.
 
+### Accepted semantic amendment (2026-09-13)
+
+Codex App Server now exposes independently scoped model buckets with more than
+one window, an authoritative `ordinaryUsageAllowed` state, bucket-level
+`rateLimitReachedType`, and earned reset-credit counts. A model-specific limit
+does not stop ordinary Codex work, so it must not drive the provider-level
+panel meter. The Codex panel meter is derived only from the main bucket
+identified by the backward-compatible `rateLimits` projection; independently
+metered models remain visible as detail.
+
+The dropdown groups each Codex bucket name once above its duration rows and
+shows a positive earned-reset count as quiet, read-only metadata. Explicit
+backend access and reached states override percentage inference. An absent
+`ordinaryUsageAllowed` retains compatibility with older App Server versions;
+explicit `null` is unavailable, as required by the generated protocol schema.
+Token-activity, upsell, purchase, and reset-consumption surfaces remain out of
+scope. This amendment was accepted by the maintainer's implementation request.
+
 ## Goals
 
-- **G1** - Show the most constrained current Claude and Codex quota side by
-  side in the GNOME panel.
+- **G1** - Show Claude's most constrained quota and Codex's main included-usage
+  quota side by side in the GNOME panel.
 - **G2** - Show every available Claude and Codex limit and reset time in the
   dropdown, including model-specific Codex buckets.
 - **G3** - Keep quota checks model-free, read-only, credential-free in the
@@ -114,9 +132,12 @@ The scheduler receives:
         claude: {fetchedAt, session?, week?, weekModel?, error?},
         codex: {
             fetchedAt,
+            mainLimitId,
+            ordinaryUsageAllowed?,
+            resetCreditsAvailable?,
             windows: [{
-                limitId, limitName?, slot, percent,
-                durationMins, resetsAt,
+                limitId, limitName?, slot, percent, reachedType?,
+                durationMins?, resetsAt?,
             }],
             error?,
         },
@@ -129,6 +150,15 @@ prefers `rateLimitsByLimitId` when present and falls back to `rateLimits`, so th
 backward-compatible bucket is never displayed twice. Consumed fields are
 strictly typed; percentages are clamped to 0–100, and unknown extra fields are
 ignored. App Server error text is journal-only and never reaches the menu.
+
+The main `rateLimits` projection identifies `mainLimitId`; the multi-bucket
+view still supplies the displayed windows without duplication. The panel
+chooses the highest percentage only among that main bucket's windows.
+`ordinaryUsageAllowed: false` or a main-bucket `reachedType` overrides the
+numeric threshold with a reached/unavailable state; explicit
+`ordinaryUsageAllowed: null` renders the Codex panel item unavailable rather
+than guessing from possibly stale percentages. Named buckets can independently
+reach their own limit without making all of Codex appear blocked.
 
 The Codex adapter caches its last successful result. A transient failure keeps
 that snapshot with its original `fetchedAt`, allowing the normal stale UI to
@@ -168,22 +198,26 @@ them beside dropdown headings teaches the association. Each panel unit has a
 fixed 29 px allocation; a 4 px internal gap and 12 px inter-provider gap make
 ownership clear. The combined provider strip remains 70 px in every state.
 
-The fill always represents the provider's highest used percentage. The old
-single-indicator style and headline pin settings remain in the schema for safe
-upgrade compatibility but are no longer presented or used by the multi-provider
-panel.
+Claude's fill represents its highest used percentage. Codex's fill represents
+the highest window only inside its main included-usage bucket; specialized
+model buckets never take over the provider-level meter. The old single-indicator
+style and headline pin settings remain in the schema for safe upgrade
+compatibility but are no longer presented or used by the multi-provider panel.
 
 ### Dropdown and failure behavior
 
 The existing bar-row layout remains, grouped beneath one centered heading per
-provider; provider names are not repeated on window titles. Codex titles
-include a bounded form of the App Server's optional `limitName` and a compact
-window-duration label. The viewport is fixed at 300 px wide and every dynamic
-label ellipsizes, so values cannot resize the popup. Provider notices remain
-independent: if Codex is missing, Claude rows still render and the menu
-explains only the Codex problem. The footer summarizes freshness for both
-providers and its refresh button updates both. Explicit vertical margins and
-padding keep adjacent quota blocks visually separate.
+provider; provider names are not repeated on window titles. Within Codex, each
+bounded bucket name appears once as a subheading, followed by compact duration
+rows for its primary and secondary windows. A positive
+`rateLimitResetCredits.availableCount` appears once as a quiet informational
+line; there is no consume action. The viewport is fixed at 300 px wide and
+every dynamic label ellipsizes, so values cannot resize the popup. Provider
+notices remain independent: if Codex is missing or its explicit access state is
+unknown, Claude rows still render and the menu explains only the Codex problem.
+The footer summarizes freshness for both providers and its refresh button
+updates both. Explicit vertical margins and padding keep adjacent quota blocks
+visually separate.
 
 ## Testing Strategy
 
@@ -194,6 +228,8 @@ padding keep adjacent quota blocks visually separate.
 | One provider failure hides the other | Unit | `multi_source.test.js`, composite indicator/menu model tests |
 | Panel no longer shows both compact meters | Pure model + manual Shell | `indicator_model.test.js`; RFC-002 smoke-test additions |
 | Model-specific Codex limits disappear or duplicate | Unit | `codex_snapshot.test.js`, `menu_model.test.js` |
+| Specialized Codex limit falsely blocks the main meter | Unit | `indicator_model.test.js`, main-bucket selection and authoritative state cases |
+| Repeated model names or reset-credit noise widen the menu | Pure model + manual Shell | `menu_model.test.js`; grouped-bucket and fixed-width smoke checks |
 | Checking usage starts a model turn | Protocol invariant + manual | Assert request transcript contains account-read methods only; inspect live App Server response without thread/turn creation |
 
 The exact Cairo rendering, theme colors, HiDPI size, focus behavior, and visual
@@ -220,6 +256,9 @@ match to the supplied screenshot require a running GNOME Shell smoke check.
   *(prerequisite: Step 3)*
 - [x] **Step 5** - Update user documentation and run the complete quality gate.
   *(prerequisite: Step 4)*
+- [x] **Step 6** - Amend Codex semantics for independently scoped buckets,
+  authoritative access/reached states, grouped window rows, and read-only reset
+  credit metadata. *(accepted 2026-09-13; prerequisite: Step 5)*
 
 ## Design Review
 
@@ -244,5 +283,6 @@ the highest-risk process/protocol behavior has a fake-driven test seam.
 ## References
 
 - [Official Codex App Server documentation](https://learn.chatgpt.com/docs/app-server)
+- [Official Codex speed and Spark documentation](https://learn.chatgpt.com/docs/agent-configuration/speed)
 - [RFC-001: Claude usage data source](./RFC-001-usage-data-source.md)
 - [UX design](./UX-DESIGN.md)

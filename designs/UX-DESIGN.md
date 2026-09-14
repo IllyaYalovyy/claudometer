@@ -1,6 +1,6 @@
 # Claudometer — UX Design
 
-Status: Implemented (RFC-001 MVP; amended by accepted RFC-002 on 2026-08-09)
+Status: Implemented (RFC-001 MVP; amended by accepted RFC-002 on 2026-09-13)
 
 This document defines the user-facing design of the Claudometer GNOME Shell
 extension: what appears in the panel, what appears in the dropdown, every
@@ -44,14 +44,19 @@ The UI consumes a combined snapshot with independent `providers.claude` and
 | `weekModel[]` | no | Per-model weekly entries (e.g. Opus), same shape |
 | `error` | no | Machine-readable reason the source failed |
 
-Codex carries `fetchedAt`, `error?`, and `windows[]`. Each Codex window has a
-stable `limitId`, optional user-facing `limitName`, `percent`, `durationMins`,
-`resetsAt`, and a `primary`/`secondary` slot.
+Codex carries `fetchedAt`, `error?`, `mainLimitId`, optional
+`ordinaryUsageAllowed`, optional `resetCreditsAvailable`, and `windows[]`.
+Each Codex window has a stable `limitId`, optional user-facing `limitName`,
+`percent`, optional `durationMins`/`resetsAt`, optional `reachedType`, and a
+`primary`/`secondary` slot.
 
-Derived independently per provider: **`constraint` = the provider window with
-the highest `percent`** — the limit the user will hit first. If only one
-window is present, it is the constraint. If none are present, only that
-provider is *unavailable*; the other provider remains usable.
+Claude's **constraint** is its window with the highest `percent` — the limit
+the user will hit first. Codex's provider-level constraint is the highest
+window only inside `mainLimitId`, the ordinary included-usage bucket. A
+separately metered model such as Spark remains visible in the menu but cannot
+make ordinary Codex look blocked. If the relevant constraint is absent, only
+that provider is *unavailable*; the other provider remains usable. Explicit
+Codex access/reached fields take precedence over percentage inference.
 
 Rationale: users do not want to arbitrate between windows at a glance. The
 battery indicator does not show per-cell voltages; it shows the number that
@@ -72,9 +77,10 @@ determines when you stop working.
   Their color and silhouette evoke the providers while remaining distinct
   original marks. The dropdown repeats them beside provider headings.
 - **Meters:** one 9×16 px vertical track beside each 16 px symbol,
-  filled from bottom to the provider constraint's percent used. Normal fill
-  uses GNOME blue; warning/error use the configured state colors. The empty
-  track remains visible at 40% opacity so icon/meter ownership is clear.
+  filled from bottom to the provider constraint's percent used. For Codex,
+  that means only its main included-usage bucket. Normal fill uses GNOME blue;
+  warning/error use the configured state colors. The empty track remains
+  visible at 40% opacity so icon/meter ownership is clear.
 - **Fixed representation:** each mark/meter unit is 29 px and the pair is 70
   px total. The internal gap is 4 px versus 12 px between providers, making
   the two units unambiguous. No percentage label or display-mode/headline pin.
@@ -96,7 +102,7 @@ extensions the user may already have.
 | Normal | constraint < 80% | neutral symbol + fill to % | GNOME blue (`#3584e4`) |
 | Warning | 80% ≤ constraint < 95% | same fill geometry | warning (`#f5c211`) |
 | Critical | constraint ≥ 95% | same fill geometry | error (`#c01c28`) |
-| Limit hit | constraint ≥ 100% | full meter | error |
+| Limit hit | constraint ≥ 100%, or authoritative Codex reached/access-denied state | reported fill; reached state is explicit in text | error |
 | Stale | provider data older than 3× poll interval | last fill, whole pair at 55% opacity | retains threshold color |
 | Unavailable | provider has no usable data | empty meter with slash, whole pair at 55% | foreground |
 
@@ -109,6 +115,10 @@ Notes:
   not-fresh. The menu states the exact age (§4.4).
 - Unavailable draws no fill. Showing `0%` here would be the single
   worst honesty failure this design can commit.
+- An explicit Codex `ordinaryUsageAllowed: null` is unavailable because the
+  backend could not prove access. `false` and a main-bucket `reachedType`
+  render as reached/blocked while preserving the reported fill rather than
+  fabricating 100%.
 - No animation in any state. No pulsing at critical. The panel is ambient;
   a user at 97% who has not clicked does not want to be nagged, and GNOME
   HIG reserves attention-demanding motion for notifications.
@@ -134,27 +144,36 @@ behavior for free.
 │  ███░░░░░░░░░░░░░░░░    18%  │
 │  Resets Tue, Jul 28          │
 │  ──────────────────────────  │
-│        [terminal] Codex      │
-│  General · 5 hours           │
+│        [nodes] Codex         │
+│  Included usage              │
+│    7 days                    │
 │  █████░░░░░░░░░░░░░░    25%  │
+│  Resets Tue, Jul 28          │
+│  GPT-5.3-Codex-Spark         │
+│    5 hours                   │
+│  ██░░░░░░░░░░░░░░░░░     8%  │
 │  Resets in 2 h 15 m (17:00)  │
-│  Spark · 7 days              │
+│    7 days                    │
 │  ███░░░░░░░░░░░░░░░░    18%  │
 │  Resets Tue, Jul 28          │
+│  2 rate-limit resets available│
 │  ──────────────────────────  │
 │  Claude 2 min · Codex now ⟳  │
 └──────────────────────────────┘
 ```
 
-Provider identity appears once in a centered heading with the same generic
-symbol used in the panel. Each window is one compact section: **bounded title,
-progress bar with percentage, reset row.** Codex's optional `limitName`
-distinguishes model-specific buckets. Dynamic labels are capped at 24 Unicode
-characters and visually ellipsized as a second line of defense. The viewport
-is fixed at 300 px wide (or reduced only to fit a narrower stage), so data can
-never resize it. If natural height exceeds the stage, content scrolls while
-the refresh footer remains reachable. Every quota block has explicit vertical
-margins and padding; adjacent model titles and reset rows never touch.
+Provider identity appears once in a centered heading with the same original
+symbol used in the panel. Each Claude window is one compact section. Codex
+first groups windows by bucket: the bounded `limitName` (or `Included usage`
+for the main bucket) appears once, followed by a compact duration/bar/reset
+section for each window. A positive earned-reset count appears once below the
+Codex buckets as quiet, read-only metadata; zero and absent counts render
+nothing. Dynamic labels are capped at 24 Unicode characters and visually
+ellipsized as a second line of defense. The viewport is fixed at 300 px wide
+(or reduced only to fit a narrower stage), so data can never resize it. If
+natural height exceeds the stage, content scrolls while the refresh footer
+remains reachable. Every quota block has explicit vertical margins and
+padding; adjacent model titles and reset rows never touch.
 
 ### 4.2 Progress bars
 
@@ -219,9 +238,18 @@ raw error string or exit code in the menu (those go to the journal/log).
 The refresh button remains available in every degraded state — it is the
 user's "I fixed it, check again."
 
-**Limit hit:** sections render as usual (the bar full, at error color);
-the constraint section's reset row is promoted to the top of the menu as
-the first line: `Session limit reached — resets in 1 h 12 m (17:00)`.
+If Codex explicitly returns an unknown ordinary-access state, its existing
+rows may remain as detail but the provider is labelled unavailable and the
+menu asks the user to refresh. Explicit access denial and bucket reached
+states use fixed human-readable wording; workspace credit/usage controls do
+not promise recovery at a quota reset time.
+
+**Limit hit:** sections render as usual with an error-color bar. A numeric
+100% remains full; authoritative Codex states preserve the backend's reported
+fill rather than inventing 100%. The constraint section's reset row is promoted
+to the top of the menu as the first line: `Session limit reached — resets in
+1 h 12 m (17:00)`. A Codex bucket with an authoritative reached state is
+promoted once even when it contains both primary and secondary windows.
 
 ## 5. Interaction summary
 
@@ -271,7 +299,9 @@ compatibility; RFC-002's panel representation is fixed and does not read them.
 
 - Indicator `accessible-name` carries both provider stories, for example
   "Claude usage: 67 percent used, resets …; Codex usage: 42 percent used,
-  resets …". Provider failure and stale qualifiers are independent.
+  resets …". The Codex clause is its main included-usage story; model-only
+  limits stay in their menu rows. Provider failure, access, reached, and stale
+  qualifiers are independent.
 - Menu rows are real menu items with proper labels; progress bars expose
   their value via the accompanying text, not as unlabeled drawings.
 - All colors come from the shell theme with sufficient-contrast fallbacks;
@@ -314,6 +344,6 @@ compatibility; RFC-002's panel representation is fixed and does not read them.
 
 | User task | Sections |
 |---|---|
-| UT-001 (glance) | §3 per-provider indicators, §2 constraint derivation |
+| UT-001 (glance) | §3 per-provider indicators, §2 provider-specific constraint derivation |
 | UT-002 (detail on demand) | §4 dropdown, §5 interaction |
 | UT-003 (unavailable state) | §3.3, §4.5 |

@@ -15,11 +15,14 @@
 //               a raw error string can never reach the menu (raw causes
 //               go to console.warn/the journal in the IO layers).
 //   groups[]    optional provider groups for a composite snapshot. Provider
-//               names/icons live here once, never in every window title.
+//               names/icons live here once, never in every window title;
+//               Codex groups may carry one quiet reset-credit note.
 //   sections[]  flattened compatibility view of the grouped windows, in
 //               Claude then Codex order; absent windows produce nothing:
 //     kind         'session' | 'week' | 'weekModel' (derive.js vocabulary)
 //     providerName composite-only provider context for accessibility
+//     bucketName   Codex bucket context retained for accessibility
+//     bucketTitle  bounded Codex bucket heading on its first row, else null
 //     title        §4.1 section title row text
 //     percent      raw fill datum for the §4.2 bar (0–100)
 //     percentText  the §4.2 accompanying number, e.g. '67%'
@@ -134,7 +137,9 @@ function promotedLine(constraint, now, clock24) {
         `${row.charAt(0).toLowerCase()}${row.slice(1)}`;
 }
 
-function durationLabel(minutes) {
+function durationLabel(minutes, slot) {
+    if (minutes === undefined)
+        return slot === 'primary' ? 'Current window' : 'Additional window';
     if (minutes % 1440 === 0) {
         const days = minutes / 1440;
         return `${days} ${days === 1 ? 'day' : 'days'}`;
@@ -146,21 +151,129 @@ function durationLabel(minutes) {
     return `${minutes} min`;
 }
 
-function codexSection(window, index, now, opts) {
-    const windowName = window.limitName == null
-        ? 'General'
+function codexBucketName(window, mainLimitId) {
+    if (window.limitId === mainLimitId)
+        return 'Included usage';
+    return window.limitName == null
+        ? 'Other usage'
         : boundedLabel(window.limitName);
+}
+
+function codexSection(window, index, bucketName, first, denied, now, opts) {
     return {
         kind: `codex:${window.limitId}:${window.slot}:${index}`,
         providerName: 'Codex',
-        title: `${windowName} · ${durationLabel(window.durationMins)}`,
+        bucketName,
+        bucketTitle: first ? bucketName : null,
+        title: durationLabel(window.durationMins, window.slot),
         percent: window.percent,
         percentText: formatPercent(window.percent),
-        barState: barState(window.percent, opts.warningAt, opts.criticalAt),
+        barState: denied || typeof window.reachedType === 'string'
+            ? CRITICAL
+            : barState(window.percent, opts.warningAt, opts.criticalAt),
         resetText: window.resetsAt == null
             ? null
             : formatResetRow(window.resetsAt, now, {clock24: opts.clock24}),
     };
+}
+
+function codexMainLimitId(snapshot) {
+    const windows = snapshot?.windows ?? [];
+    return snapshot?.mainLimitId ??
+        windows.find(window => window.limitId === 'codex')?.limitId ??
+        windows.find(window => window.limitName === undefined)?.limitId ?? null;
+}
+
+function codexConstraint(snapshot) {
+    const mainLimitId = codexMainLimitId(snapshot);
+    let constraint = null;
+    for (const window of snapshot?.windows ?? []) {
+        if (window.limitId !== mainLimitId)
+            continue;
+        if (constraint === null || window.percent > constraint.percent)
+            constraint = window;
+    }
+    return constraint;
+}
+
+function codexSections(snapshot, now, opts) {
+    const buckets = new Map();
+    for (const [index, window] of (snapshot?.windows ?? []).entries()) {
+        if (!buckets.has(window.limitId))
+            buckets.set(window.limitId, []);
+        buckets.get(window.limitId).push({index, window});
+    }
+    const mainLimitId = codexMainLimitId(snapshot);
+    return [...buckets.values()].flatMap(entries => {
+        const bucketName = codexBucketName(entries[0].window, mainLimitId);
+        const denied = entries[0].window.limitId === mainLimitId &&
+            snapshot?.ordinaryUsageAllowed === false;
+        return entries.map(({index, window}, bucketIndex) => codexSection(
+            window, index, bucketName, bucketIndex === 0, denied, now, opts));
+    });
+}
+
+function codexAccessUnknown(snapshot) {
+    return snapshot !== null && typeof snapshot === 'object' &&
+        Object.hasOwn(snapshot, 'ordinaryUsageAllowed') &&
+        snapshot.ordinaryUsageAllowed === null;
+}
+
+function codexResetCreditText(snapshot) {
+    const count = snapshot?.resetCreditsAvailable;
+    if (!Number.isSafeInteger(count) || count <= 0)
+        return null;
+    return `${count} rate-limit ${count === 1 ? 'reset' : 'resets'} available`;
+}
+
+function codexPromotionLines(snapshot, now, clock24) {
+    const mainLimitId = codexMainLimitId(snapshot);
+    const buckets = new Map();
+    for (const window of snapshot?.windows ?? []) {
+        if (!buckets.has(window.limitId))
+            buckets.set(window.limitId, []);
+        buckets.get(window.limitId).push(window);
+    }
+    const lines = [];
+    for (const windows of buckets.values()) {
+        const first = windows[0];
+        const reachedType = windows.find(window =>
+            typeof window.reachedType === 'string')?.reachedType;
+        const reachedWindow = windows.find(window => window.percent >= 100) ??
+            windows.reduce((best, window) =>
+                best === null || window.percent > best.percent ? window : best,
+            null);
+        const ordinaryDenied = first.limitId === mainLimitId &&
+            snapshot?.ordinaryUsageAllowed === false;
+        if (reachedType === undefined && !ordinaryDenied &&
+            !windows.some(window => window.percent >= 100))
+            continue;
+
+        let text;
+        if (reachedType === 'workspace_owner_credits_depleted' ||
+            reachedType === 'workspace_member_credits_depleted') {
+            text = 'Codex workspace credits depleted';
+        } else if (reachedType === 'workspace_owner_usage_limit_reached' ||
+                   reachedType === 'workspace_member_usage_limit_reached') {
+            text = 'Codex workspace usage limit reached';
+        } else if (ordinaryDenied && reachedType === undefined) {
+            text = 'Codex included usage unavailable';
+        } else {
+            const name = first.limitId === mainLimitId
+                ? 'Codex included usage'
+                : codexBucketName(first, mainLimitId);
+            text = `${name} limit reached`;
+        }
+
+        const resetIsAuthoritative = reachedType === 'rate_limit_reached' ||
+            (reachedType === undefined && !ordinaryDenied);
+        if (resetIsAuthoritative && reachedWindow?.resetsAt != null) {
+            const reset = formatResetRow(reachedWindow.resetsAt, now, {clock24});
+            text += ` — ${reset.charAt(0).toLowerCase()}${reset.slice(1)}`;
+        }
+        lines.push(text);
+    }
+    return lines;
 }
 
 function providerNotice(id, snapshot) {
@@ -169,6 +282,12 @@ function providerNotice(id, snapshot) {
         return {
             headline: `${name} was not found on this system.`,
             detail: `Install ${name}, then refresh.`,
+        };
+    }
+    if (id === 'codex' && codexAccessUnknown(snapshot)) {
+        return {
+            headline: 'Codex access status is unavailable.',
+            detail: 'Refresh Codex usage data to check again.',
         };
     }
     return {
@@ -220,9 +339,7 @@ function multiProviderMenuModel(snapshot, now, opts) {
             providerName: 'Claude',
             title: `${boundedLabel(entry.model)} · 7 days`});
     }
-    const codexSections = [];
-    for (const [index, window] of (codex?.windows ?? []).entries())
-        codexSections.push(codexSection(window, index, now, values));
+    const renderedCodexSections = codexSections(codex, now, values);
     const groups = [{
         id: 'claude',
         title: 'Claude',
@@ -232,20 +349,17 @@ function multiProviderMenuModel(snapshot, now, opts) {
         id: 'codex',
         title: 'Codex',
         mark: 'codex',
-        sections: codexSections,
-    }].filter(group => group.sections.length > 0);
+        sections: renderedCodexSections,
+        note: codexResetCreditText(codex),
+    }].filter(group => group.sections.length > 0 || group.note != null);
     const sections = groups.flatMap(group => group.sections);
 
     const claudeConstraint = constraintOf(claude);
-    let codexConstraint = null;
-    for (const window of codex?.windows ?? []) {
-        if (codexConstraint === null || window.percent > codexConstraint.percent)
-            codexConstraint = window;
-    }
+    const mainCodexConstraint = codexConstraint(codex);
     const unavailable = [];
     if (claudeConstraint === null)
         unavailable.push(['claude', claude]);
-    if (codexConstraint === null)
+    if (mainCodexConstraint === null || codexAccessUnknown(codex))
         unavailable.push(['codex', codex]);
 
     let notice = null;
@@ -264,18 +378,13 @@ function multiProviderMenuModel(snapshot, now, opts) {
         promoted.push(`Claude ${promotedLine(
             claudeConstraint, now, clock24).toLowerCase()}`);
     }
-    if (codexConstraint !== null && codexConstraint.percent >= 100 &&
-        now - codex.fetchedAt <= staleAfterMs) {
-        const label = codexConstraint.limitName ?? 'Codex';
-        const reset = codexConstraint.resetsAt == null
-            ? ''
-            : ' — ' + formatResetRow(codexConstraint.resetsAt, now, {clock24})
-                .toLowerCase();
-        promoted.push(`${label} limit reached${reset}`);
-    }
+    if (codex?.windows?.length > 0 &&
+        now - codex.fetchedAt <= staleAfterMs)
+        promoted.push(...codexPromotionLines(codex, now, clock24));
 
     const claudeUsable = claudeConstraint !== null;
-    const codexUsable = codexConstraint !== null;
+    const codexUsable = mainCodexConstraint !== null &&
+        !codexAccessUnknown(codex);
     const freshnessText = [
         freshnessPart('claude', claude, now, values, claudeUsable),
         freshnessPart('codex', codex, now, values, codexUsable),

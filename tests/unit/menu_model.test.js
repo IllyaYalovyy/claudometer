@@ -296,14 +296,24 @@ test('multi_provider_menu_lists_claude_and_every_codex_bucket_window', () => {
             session: {percent: 67, resetsAt: RESET},
             week: {percent: 42, resetsAt: FAR_RESET},
         },
-        codex: {fetchedAt: NOW, windows: [{
-            limitId: 'codex', slot: 'primary', percent: 25,
-            durationMins: 300, resetsAt: RESET,
-        }, {
-            limitId: 'codex_spark', limitName: 'GPT-5.3-Codex-Spark',
-            slot: 'primary', percent: 18, durationMins: 10080,
-            resetsAt: FAR_RESET,
-        }]},
+        codex: {
+            fetchedAt: NOW,
+            mainLimitId: 'codex',
+            ordinaryUsageAllowed: true,
+            resetCreditsAvailable: 2,
+            windows: [{
+                limitId: 'codex', slot: 'primary', percent: 25,
+                durationMins: 10080, resetsAt: FAR_RESET,
+            }, {
+                limitId: 'codex_spark', limitName: 'GPT-5.3-Codex-Spark',
+                slot: 'primary', percent: 8, durationMins: 300,
+                resetsAt: RESET,
+            }, {
+                limitId: 'codex_spark', limitName: 'GPT-5.3-Codex-Spark',
+                slot: 'secondary', percent: 18, durationMins: 10080,
+                resetsAt: FAR_RESET,
+            }],
+        },
     }});
     assertEquals(m.groups.length, 2);
     assertEquals(m.groups[0].title, 'Claude');
@@ -311,15 +321,21 @@ test('multi_provider_menu_lists_claude_and_every_codex_bucket_window', () => {
     assertEquals(m.groups[0].sections.length, 2);
     assertEquals(m.groups[1].title, 'Codex');
     assertEquals(m.groups[1].mark, 'codex');
-    assertEquals(m.groups[1].sections.length, 2);
-    assertEquals(m.sections.length, 4);
+    assertEquals(m.groups[1].sections.length, 3);
+    assertEquals(m.groups[1].note, '2 rate-limit resets available');
+    assertEquals(m.sections.length, 5);
     assertEquals(m.sections[0].providerName, 'Claude');
     assertEquals(m.sections[2].providerName, 'Codex');
     assertEquals(m.sections[0].title, 'Session · 5 hours');
     assertEquals(m.sections[1].title, 'All models · 7 days');
-    assertEquals(m.sections[2].title, 'General · 5 hours');
-    assertEquals(m.sections[3].title,
-        'GPT-5.3-Codex-Spark · 7 days');
+    assertEquals(m.sections[2].bucketTitle, 'Included usage');
+    assertEquals(m.sections[2].title, '7 days');
+    assertEquals(m.sections[3].bucketTitle, 'GPT-5.3-Codex-Spark');
+    assertEquals(m.sections[3].title, '5 hours');
+    assertEquals(m.sections[4].bucketTitle, null,
+        'model name appears only once for the bucket');
+    assertEquals(m.sections[4].bucketName, 'GPT-5.3-Codex-Spark');
+    assertEquals(m.sections[4].title, '7 days');
     assertEquals(m.notice, null);
     assertEquals(m.footer.freshnessText, 'Claude now · Codex now');
 });
@@ -340,7 +356,121 @@ test('provider_names_are_grouped_once_and_dynamic_titles_are_bounded', () => {
         !section.title.startsWith('Codex')), true);
     assertEquals(m.sections.every(section => section.title.length <= 34), true);
     assertEquals(m.sections[0].title.includes('…'), true);
-    assertEquals(m.sections[1].title.includes('…'), true);
+    assertEquals(m.sections[1].title, '7 days');
+    assertEquals(m.sections[1].bucketTitle.includes('…'), true);
+    assertEquals(m.sections[1].bucketTitle.length, 24);
+});
+
+test('reset_credit_note_is_singular_and_hides_zero', () => {
+    const codex = {
+        fetchedAt: NOW,
+        mainLimitId: 'codex',
+        windows: [{
+            limitId: 'codex', slot: 'primary', percent: 31,
+            durationMins: 10080, resetsAt: FAR_RESET,
+        }],
+    };
+    let m = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 40}},
+        codex: {...codex, resetCreditsAvailable: 1},
+    }});
+    assertEquals(m.groups[1].note, '1 rate-limit reset available');
+
+    m = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 40}},
+        codex: {...codex, resetCreditsAvailable: 0},
+    }});
+    assertEquals(m.groups[1].note, null);
+});
+
+test('codex_access_and_bucket_reached_states_are_explicit', () => {
+    const claude = {fetchedAt: NOW, session: {percent: 40}};
+    const base = {
+        fetchedAt: NOW,
+        mainLimitId: 'codex',
+        windows: [{
+            limitId: 'codex', slot: 'primary', percent: 31,
+            durationMins: 10080, resetsAt: FAR_RESET,
+        }],
+    };
+    let m = model({providers: {
+        claude,
+        codex: {...base, ordinaryUsageAllowed: null},
+    }});
+    assertEquals(m.notice.headline, 'Codex access status is unavailable.');
+    assertEquals(m.footer.freshnessText, 'Claude now · Codex unavailable');
+
+    m = model({providers: {
+        claude,
+        codex: {...base, ordinaryUsageAllowed: false},
+    }});
+    assertEquals(m.notice, null);
+    assertEquals(m.promoted, 'Codex included usage unavailable');
+    assertEquals(m.sections[1].barState, 'critical');
+
+    m = model({providers: {
+        claude,
+        codex: {...base, ordinaryUsageAllowed: true, windows: [{
+            ...base.windows[0], reachedType: 'rate_limit_reached',
+        }]},
+    }});
+    assertEquals(m.promoted,
+        'Codex included usage limit reached — resets Tue, Jul 28');
+    assertEquals(m.sections[1].barState, 'critical');
+
+    m = model({providers: {
+        claude,
+        codex: {...base, ordinaryUsageAllowed: true, windows: [{
+            ...base.windows[0],
+            reachedType: 'workspace_owner_usage_limit_reached',
+        }]},
+    }});
+    assertEquals(m.promoted, 'Codex workspace usage limit reached',
+        'workspace controls do not promise recovery at a quota reset');
+});
+
+test('specialized_codex_reached_state_is_scoped_and_promoted_once', () => {
+    const spark = 'GPT-5.3-Codex-Spark';
+    const m = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 40}},
+        codex: {
+            fetchedAt: NOW,
+            mainLimitId: 'codex',
+            ordinaryUsageAllowed: true,
+            windows: [{
+                limitId: 'codex', slot: 'primary', percent: 31,
+                durationMins: 10080, resetsAt: FAR_RESET,
+            }, {
+                limitId: 'spark', limitName: spark, slot: 'primary',
+                percent: 20, durationMins: 300, resetsAt: RESET,
+                reachedType: 'rate_limit_reached',
+            }, {
+                limitId: 'spark', limitName: spark, slot: 'secondary',
+                percent: 18, durationMins: 10080, resetsAt: FAR_RESET,
+                reachedType: 'rate_limit_reached',
+            }],
+        },
+    }});
+    assertEquals(m.promoted,
+        `${spark} limit reached — resets in 2 h 15 m (17:00)`);
+    assertEquals(m.sections[1].barState, 'normal',
+        'main included usage remains independent');
+    assertEquals(m.sections[2].barState, 'critical');
+    assertEquals(m.sections[3].barState, 'critical');
+});
+
+test('missing_codex_window_duration_uses_a_neutral_slot_label', () => {
+    const m = model({providers: {
+        claude: {fetchedAt: NOW, session: {percent: 40}},
+        codex: {fetchedAt: NOW, mainLimitId: 'codex', windows: [{
+            limitId: 'codex', slot: 'primary', percent: 31,
+        }, {
+            limitId: 'codex', slot: 'secondary', percent: 10,
+        }]},
+    }});
+    assertEquals(m.sections[1].title, 'Current window');
+    assertEquals(m.sections[2].title, 'Additional window');
+    assertEquals(m.sections[1].resetText, null);
 });
 
 test('one_unavailable_provider_keeps_the_other_rows_and_gets_its_own_notice', () => {

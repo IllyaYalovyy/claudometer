@@ -28,7 +28,8 @@ const ext = Main.extensionManager.lookup('claudometer@illyayalovyy.github.io').s
 ext._claudeSource._config.filePath = '/tmp/claudometer-smoke/<state>.json';
 ext._claudeSource._config.refreshArgv = ['/bin/true']; // or a fixture fake
 // For deterministic Codex states, replace ext._codexSource._fetcher with an
-// async function returning a prepared {fetchedAt, windows} or error snapshot.
+// async function returning a prepared {fetchedAt, mainLimitId,
+// ordinaryUsageAllowed?, resetCreditsAvailable?, windows} or error snapshot.
 ext._scheduler.refreshNow();
 ```
 
@@ -51,32 +52,42 @@ tested so reruns test the same edge.
 ## A. UT-001 — glance at usage from the panel
 
 1. **Normal state, both provider constraints.** Feed Claude session 27%, week
-   34%, and Codex windows 25%/42%. Expect: warm bloom + blue vertical meter at
-   34%, then teal neural ring + blue meter at 42%. Meters are 9 px wide; the
-   combined provider strip remains 70 px after refresh.
+   34%; Codex main included usage 31%; and a separately named Codex model at
+   100%. Expect: warm bloom + blue vertical meter at 34%, then teal neural ring
+   + blue meter at 31%. The specialized model must not take over the Codex
+   panel state. Meters are 9 px wide; the combined provider strip remains 70
+   px after refresh.
 2. **Warning threshold boundary.** Feed either provider constraint exactly 80%
    (default warning threshold). Expect its meter in warning color
    (`#f5c211`); 79% must stay blue. The other provider is unchanged.
 3. **Critical threshold boundary.** Feed either provider constraint exactly
    95%. Expect its meter in error color (`#c01c28`); 94% stays warning.
-4. **Limit hit.** Feed constraint 100% with a reset ~1 h out. Expect a full
-   error-color meter; the dropdown and accessible name carry the reset time.
+4. **Limit hit.** Feed a constraint at 100% with a reset ~1 h out, then a Codex
+   main bucket below 100% with `rate_limit_reached`. Expect an error-color
+   meter and explicit reached wording in both cases; the authoritative Codex
+   state must not be ignored merely because its percentage is lower.
 5. **Provider marks.** At 1× and 2× scale, verify the original Claude bloom and
    Codex neural ring are crisp, distinct, and suggest their providers without
    copying or bundling vendor logos. The same marks appear beside headings.
 6. **Independent unavailable state.** Make Codex unavailable with healthy
    Claude data, then reverse it. Expect only the unavailable provider pair to
-   dim and show a slashed empty meter.
+   dim and show a slashed empty meter. Also feed
+   `ordinaryUsageAllowed: null`; Codex alone must show access status
+   unavailable. Feed `false`; its reported fill remains unchanged but uses the
+   reached/error state and the menu says included usage is unavailable.
 
 ## B. UT-002 — usage detail on demand
 
 7. **Menu layout and width.** Open the menu on full fixture data. Expect one
    centered Claude heading followed by session/week/model sections, then one
-   centered Codex heading followed by general/named model sections. Provider
-   names do not repeat in titles. Each quota is one compact title/bar/reset
-   block with visible vertical breathing room; transformed row bounds must not
-   overlap. Only provider groups have separators. The viewport remains 300 px
-   wide with normal data, a 100-character model name, and unavailable states;
+   centered Codex heading. Under Codex, expect `Included usage` once above its
+   duration row and each named model once above all of that model's duration
+   rows. Provider/model names do not repeat in window titles. A positive reset
+   credit count appears once as a quiet note; zero/absent counts disappear.
+   Each quota is one compact title/bar/reset block with visible vertical
+   breathing room; transformed row bounds must not overlap. Only provider
+   groups have separators. The viewport remains 300 px wide with normal data,
+   a 100-character model name, changing reset count, and unavailable states;
    the long title ellipsizes. At 1280×720, verify overflow scrolls to the
    footer instead of extending off-stage. No settings gear.
 8. **Independent bar coloring.** Feed session 97% + week 34%. Expect only
@@ -170,9 +181,11 @@ tested so reruns test the same edge.
     (Accerciser, or `Main.panel.statusArea[uuid].accessible_name` via
     Eval) in each state. Expect the full story, independent of display
     mode:
-    - normal: both `Claude usage: …` and `Codex usage: …` clauses
+    - normal: both `Claude usage: …` and the main `Codex usage: …` clauses;
+      a higher model-specific Codex limit does not replace the latter
     - stale: only the stale provider clause says `data is N min old`
-    - unavailable: only that provider says `usage data unavailable`
+    - unavailable: only that provider says `usage data unavailable` (or Codex
+      `access status unavailable` for explicit unknown access)
 27. **Keyboard-only operation.** Without a pointer: focus the indicator
     (Ctrl+Alt+Tab to the top bar in a real session, or `grab_key_focus()`
     headless), Enter/Space opens the menu, arrows walk the items, Enter
@@ -190,6 +203,7 @@ move older ones to the task/issue that ran them.
 
 | Executed | Commit | Items | Result |
 |---|---|---|---|
+| 2026-09-13 | working tree (Codex limit semantics revision) | RFC-002 items 1, 4, 6, 7, 19, 26 | PASS in GNOME Shell 49.9 headless: a 100% Spark bucket left the main Codex meter at 31% normal; authoritative access denial preserved the 31% fill at reached/error state and unknown access rendered unavailable; panel stayed 70 px with 9 px meters; Codex rendered `Included usage` once and one bounded Spark heading above its two duration rows; all measured row gaps were positive; a 100+ character model and 9-digit reset count left the popup at 300 px; section accessible names retained provider/model context; clean disable/re-enable with no extension error. |
 | 2026-08-11 | working tree (provider marks and spacing revision) | RFC-002 items 1, 5, 7, 26 | PASS in GNOME Shell 49.7 headless: original warm bloom and teal neural ring rendered in panel/headings; meters measured 9 px; provider units measured 29 px with a stable 70 px strip; five live quota rows measured 89 px high with non-negative gaps and visibly separated text; 11-row overflow remained 300 px wide and keyboard-scrolled to the footer; unavailable widths remained fixed; clean enable/disable. Full release smoke remains required. |
 | 2026-08-10 | working tree (grouped compact UI revision) | RFC-002 items 1, 5, 7, 26 | PASS in GNOME Shell 49.7 headless: generic chat/terminal icons rendered consistently in panel/headings; groups removed every repeated provider prefix; panel stayed 58 px and menu stayed 300 px across live, long-name, and unavailable snapshots; long titles ellipsized; clean enable/disable. Full release smoke remains required. |
 | 2026-08-09 | working tree (RFC-002 implementation) | RFC-002 items 1, 5, 7, 19, 26 | PASS in GNOME Shell 49.9 headless: two symbols/meters rendered from live Claude+Codex data, five provider-prefixed menu windows rendered general-before-model, 720px overflow scrolled to a reachable footer, keyboard focus auto-scrolled the footer into view, combined accessible name present, clean enable/disable. Full release smoke remains required. |
