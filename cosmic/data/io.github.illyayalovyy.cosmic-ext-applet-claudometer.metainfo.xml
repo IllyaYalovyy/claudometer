@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>io.github.illyayalovyy.cosmic-ext-applet-claudometer</id>
+  <extends>com.system76.CosmicPanel</extends>
+  <name>Claudometer</name>
+  <summary>Claude Code and Codex usage limits in the panel, without starting model turns to check</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Shows one compact symbol-and-meter pair per provider in the COSMIC panel
+      and a popup with every Claude Code and Codex rate-limit window, reset
+      time, and freshness. Usage is read from Claude Code's local cache and the
+      documented Codex App Server account endpoint; checking never starts a
+      model turn.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/IllyaYalovyy/claudometer</url>
+  <url type="bugtracker">https://github.com/IllyaYalovyy/claudometer/issues</url>
+  <launchable type="desktop-id">io.github.illyayalovyy.cosmic-ext-applet-claudometer.desktop</launchable>
+  <provides>
+    <binary>cosmic-ext-applet-claudometer</binary>
+  </provides>
+</component>

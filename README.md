@@ -135,6 +135,13 @@ refresh is guarded by the existing zero-token tripwire. The Codex path starts
 `codex app-server` only long enough to call the documented read-only
 `account/rateLimits/read` method; it never starts a thread or turn.
 
+## COSMIC desktop
+
+The same meters and dropdown are available as a native COSMIC™ panel applet
+under [`cosmic/`](cosmic/README.md), a separate Rust crate that shares this
+repository's design documents and test fixtures. See its README for build and
+install instructions.
+
 ## Status
 
 The MVP plus RFC-002's Claude/Codex panel meters and multi-provider dropdown

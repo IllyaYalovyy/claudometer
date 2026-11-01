@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Claudometer
+Comment=Claude Code and Codex usage limits for the COSMIC™ desktop
+Type=Application
+Exec=cosmic-ext-applet-claudometer
+Terminal=false
+Categories=Cosmic;Iced;
+Keywords=Cosmic;Iced;Claude;Codex;Usage;Limits;
+Icon=io.github.illyayalovyy.cosmic-ext-applet-claudometer-symbolic
+StartupNotify=true
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicHoverPopup=Auto
