@@ -2,6 +2,7 @@
 name = "cosmic-ext-applet-claudometer"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "COSMIC panel applet showing Claude Code and Codex usage limits, without starting model turns to check"
 license = "MIT"
 repository = "https://github.com/IllyaYalovyy/claudometer"

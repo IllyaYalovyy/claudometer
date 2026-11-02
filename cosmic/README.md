@@ -61,28 +61,139 @@ last fetch is older than 15 s.
 
 ## Requirements
 
-- A COSMIC desktop session (this is a `cosmic-panel` applet).
-- Rust (stable) and, optionally, [`just`](https://github.com/casey/just).
+- A COSMIC desktop session (this is a `cosmic-panel` applet; it does not run
+  in GNOME, KDE or other desktops).
 - At least one locally installed and signed-in provider client (`claude`
   and/or `codex`). The applet looks on `PATH`, then in `~/.local/bin` and
   `~/bin`. API-key-only setups without subscription windows render as
   unavailable by design.
 
-## Build and install
+## Build and install from source
+
+### 1. Install the build tools
+
+**Rust (stable).** Install it with [rustup](https://rustup.rs) if your
+distribution's packaged Rust is older than the edition-2024 toolchain this
+crate needs (Rust 1.85 or newer):
 
 ```sh
-cd cosmic
-just build-release          # or: cargo build --release
-sudo just install           # or: just prefix=$HOME/.local install
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
 ```
 
-`install` places the binary in `<prefix>/bin`, the desktop entry in
-`<prefix>/share/applications`, the symbolic icon in
-`<prefix>/share/icons/hicolor/scalable/apps` and the metainfo in
-`<prefix>/share/metainfo`. Then add the applet from **Settings → Desktop →
-Panel → Configure panel applets** (a new applet may only appear in that list
-after logging out and back in). On systems without a usable GPU, build with
-`just build-no-wgpu` for software rendering.
+**System libraries.** The applet links `libxkbcommon` and loads the Wayland
+client libraries at runtime; libcosmic needs a C compiler and `pkg-config`
+to build.
+
+| Distribution | Packages |
+|---|---|
+| Pop!_OS / Ubuntu / Debian | `sudo apt install build-essential pkg-config git libxkbcommon-dev libwayland-dev` |
+| Fedora | `sudo dnf install gcc pkgconf-pkg-config git libxkbcommon-devel wayland-devel` |
+| Arch | `sudo pacman -S base-devel pkgconf git libxkbcommon wayland` |
+
+**`just` (optional).** The recipes below use [`just`](https://github.com/casey/just)
+(`cargo install just`, or your distribution's package). Every recipe has a
+plain-shell equivalent further down, so `just` is a convenience, not a
+requirement.
+
+### 2. Get the source
+
+```sh
+git clone https://github.com/IllyaYalovyy/claudometer.git
+cd claudometer/cosmic
+```
+
+### 3. Build
+
+```sh
+just build-release          # equivalent: cargo build --release
+```
+
+The first build compiles libcosmic and takes a few minutes; later builds are
+incremental. The binary lands at `target/release/cosmic-ext-applet-claudometer`.
+On a machine without a usable GPU, build the software-rendering variant
+instead:
+
+```sh
+just build-no-wgpu          # equivalent: cargo build --release --no-default-features
+```
+
+### 4. Install
+
+System-wide (the panel finds it immediately):
+
+```sh
+sudo just install
+```
+
+Per-user, without root (COSMIC also reads applets from `~/.local/share`):
+
+```sh
+just prefix=$HOME/.local install
+```
+
+Without `just`, run the same four `install` commands by hand (replace
+`/usr` with `$HOME/.local` for a per-user install):
+
+```sh
+APPID=io.github.illyayalovyy.cosmic-ext-applet-claudometer
+PREFIX=/usr
+sudo install -Dm0755 target/release/cosmic-ext-applet-claudometer "$PREFIX/bin/cosmic-ext-applet-claudometer"
+sudo install -Dm0644 "data/$APPID.desktop" "$PREFIX/share/applications/$APPID.desktop"
+sudo install -Dm0644 "data/icons/$APPID-symbolic.svg" "$PREFIX/share/icons/hicolor/scalable/apps/$APPID-symbolic.svg"
+sudo install -Dm0644 "data/$APPID.metainfo.xml" "$PREFIX/share/metainfo/$APPID.metainfo.xml"
+```
+
+A per-user install needs `~/.local/bin` on the `PATH` of the COSMIC session
+(it is by default on Pop!_OS), because the desktop entry starts the applet by
+its bare command name.
+
+### 5. Add the applet to the panel
+
+1. Open **Settings → Desktop → Panel** (or **Dock**).
+2. Choose **Configure panel applets**.
+3. Find **Claudometer** and add it to a panel section.
+
+A freshly installed applet may not appear in that list until you log out and
+back in; restarting `cosmic-panel` alone is sometimes not enough. Once added,
+the two meters show up immediately and the first fetch completes within a few
+seconds. If a provider is not installed or signed out, its meter shows the
+slashed unavailable state and the popup explains what to do.
+
+### Upgrading
+
+Pull the new source, rebuild, and reinstall with the same prefix:
+
+```sh
+git pull
+just build-release
+sudo just install            # or: just prefix=$HOME/.local install
+```
+
+Then remove the applet from the panel and add it again (or log out and back
+in) so the panel restarts the new binary.
+
+### Uninstalling
+
+```sh
+sudo just uninstall          # or: just prefix=$HOME/.local uninstall
+```
+
+This removes the binary, desktop entry, icon and metainfo. Settings stay
+under `~/.config/cosmic/io.github.illyayalovyy.cosmic-ext-applet-claudometer/`;
+delete that directory to reset them.
+
+### Build troubleshooting
+
+- **`edition2024` is unsupported** — the packaged Rust is too old; install
+  the toolchain through rustup as above.
+- **`failed to run custom build command` mentioning `xkbcommon` or
+  `pkg-config`** — install the system packages from the table above.
+- **The applet opens as a floating window instead of in the panel** — it was
+  started outside `cosmic-panel`. Add it through Panel settings; do not run
+  the binary by hand.
+- **Nothing happens after adding it** — check the panel's journal for lines
+  starting with `claudometer:`: `journalctl --user -f | grep claudometer`.
 
 ## Settings
 
