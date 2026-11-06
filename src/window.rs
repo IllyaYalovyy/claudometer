@@ -307,16 +307,14 @@ impl Application for Window {
             .class(cosmic::theme::Button::AppletIcon)
             .on_press(Message::TogglePopup);
         // §8: the full story rides on the tooltip, independent of the meters.
-        self.core
-            .applet
-            .applet_tooltip(
-                button,
-                model.accessible_name,
-                self.popup.is_some(),
-                Message::Surface,
-                self.core.main_window_id(),
-            )
-            .into()
+        let tooltip = self.core.applet.applet_tooltip(
+            button,
+            model.accessible_name,
+            self.popup.is_some(),
+            Message::Surface,
+            self.core.main_window_id(),
+        );
+        self.core.applet.autosize_window(tooltip).into()
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Message> {
@@ -921,6 +919,15 @@ mod tests {
         }
         // mark + gap + meter, twice, plus the provider gap: 16+4+9+12+16+4+9.
         assert!(widths.iter().all(|w| (*w - 70.0).abs() < 0.5), "{widths:?}");
+    }
+
+    #[test]
+    fn panel_content_sizes_itself_beyond_the_initial_surface() {
+        let window = sample_window(None);
+        let natural = layout(window.view(), f32::INFINITY).size();
+        let constrained = layout(window.view(), 1.0).size();
+        assert!(natural.width > MARK_SIZE);
+        assert_eq!(constrained, natural);
     }
 
     #[test]
