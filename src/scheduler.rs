@@ -1,8 +1,7 @@
-//! Refresh policy of UX-DESIGN §6 as a pure state machine (port of the
-//! testable half of `src/lib/scheduler.js`). The driver — timers, in-flight
-//! gating, manual/queued flags — lives in `window.rs` as iced messages.
+//! Refresh policy as a pure state machine. The timer and request driver
+//! lives in `window.rs`.
 
-/// UX §6: exponential backoff on failure, 1 → 2 → 5 min cap. Consecutive
+/// Exponential backoff on failure, 1 → 2 → 5 min cap. Consecutive
 /// failure N waits `LADDER[N-1]` (the last rung past the end).
 pub const BACKOFF_LADDER_SEC: [u32; 3] = [60, 120, 300];
 

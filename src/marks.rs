@@ -1,5 +1,5 @@
-//! RFC-002 compact provider marks and the vertical quota meter as generated
-//! SVG (port of the Cairo geometry in `src/provider_meter.js`). Both marks
+//! Compact provider marks and the vertical quota meter as generated
+//! SVG. Both marks
 //! are original geometry rather than vendor logos: a warm six-ray bloom for
 //! Claude and a teal six-node neural ring for Codex.
 //!

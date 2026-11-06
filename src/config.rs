@@ -1,5 +1,4 @@
-//! UX-DESIGN §7 preferences, persisted through cosmic-config (port of the
-//! GSettings schema and `src/lib/settings_model.js`).
+//! Applet preferences persisted through cosmic-config.
 //!
 //! The file lives at `~/.config/cosmic/<APP_ID>/v1/<key>`; the applet
 //! subscribes to changes, so an edit from any tool applies live without a
@@ -37,7 +36,7 @@ pub struct Settings {
     /// Background poll cadence; snapped to `REFRESH_INTERVALS_SEC`.
     pub refresh_interval_seconds: u32,
     /// Latched when a CLI refresh envelope could not prove zero model cost
-    /// (RFC-001 G1 tripwire). Cleared only by explicit user action.
+    /// Cleared only by explicit user action.
     pub refresh_path_disabled: bool,
 }
 

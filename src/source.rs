@@ -1,6 +1,5 @@
-//! RFC-002 source composition (port of `src/lib/multi_source.js`): provider
-//! reads are independent and concurrent; an unavailable Codex installation
-//! never hides a healthy Claude snapshot (or vice versa).
+//! Provider reads are independent and concurrent. An unavailable provider
+//! never hides a healthy snapshot from the other provider.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;

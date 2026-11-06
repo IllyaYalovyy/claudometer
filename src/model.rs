@@ -1,5 +1,4 @@
-//! Pure render models (ports of `src/lib/derive.js`, `format.js`,
-//! `indicator_model.js` and `menu_model.js`): (snapshot, now, options) →
+//! Pure render models map snapshots, times, and settings to
 //! what the panel and the popup should show. No widget imports, so every
 //! display decision is unit-testable; `window.rs` renders 1:1.
 
@@ -14,7 +13,7 @@ const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 3_600_000;
 const DAY_MS: i64 = 24 * HOUR_MS;
 
-/// UX §3.3 states, with the precedence the table implies.
+/// Provider states in precedence order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
     Normal,
@@ -52,7 +51,7 @@ impl Default for Options {
 }
 
 // ---------------------------------------------------------------------------
-// Formatting (format.js)
+// Formatting
 // ---------------------------------------------------------------------------
 
 pub fn format_percent(p: f64) -> String {
@@ -125,7 +124,7 @@ fn round_minutes(ms: i64) -> i64 {
 }
 
 // ---------------------------------------------------------------------------
-// Derivation (derive.js + the Codex rules of indicator_model.js)
+// Derivation
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,7 +241,7 @@ fn codex_reached_description(snapshot: &CodexSnapshot, constraint: &CodexWindow)
 }
 
 // ---------------------------------------------------------------------------
-// Panel (indicator_model.js)
+// Panel
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
@@ -410,7 +409,7 @@ pub fn indicator_model(snapshot: Option<&Snapshot>, now: i64, opts: &Options) ->
 }
 
 // ---------------------------------------------------------------------------
-// Popup (menu_model.js)
+// Popup
 // ---------------------------------------------------------------------------
 
 const MAX_DYNAMIC_LABEL_CHARS: usize = 24;
@@ -830,8 +829,8 @@ mod tests {
     use crate::claude::{ModelWindow, UsageWindow};
     use crate::codex::{Slot, parse_codex_rate_limits};
 
-    const CACHE: &str = include_str!("../../tests/fixtures/cached-usage-utilization.json");
-    const CODEX: &str = include_str!("../../tests/fixtures/codex-rate-limits-result.json");
+    const CACHE: &str = include_str!("../tests/fixtures/cached-usage-utilization.json");
+    const CODEX: &str = include_str!("../tests/fixtures/codex-rate-limits-result.json");
 
     fn claude_fixture() -> ClaudeSnapshot {
         crate::claude::parse_snapshot(

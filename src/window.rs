@@ -1,5 +1,5 @@
 //! The applet: panel strip, popup, settings page, and the refresh driver
-//! (the timer/in-flight/manual half of `src/lib/scheduler.js`). Everything
+//! for timers, in-flight requests, and manual refreshes. Everything
 //! shown comes from the pure models in `model.rs`; this file only maps them
 //! onto libcosmic widgets and wires messages.
 //!
@@ -234,7 +234,7 @@ impl Application for Window {
                 self.last_refresh_failed = output.last_refresh_failed;
                 self.snapshot = Some(output.snapshot);
                 self.fetched_at = Some(now_ms());
-                // Persist a G1 trip so it survives restarts (RFC-001).
+                // Persist the tripwire state across restarts.
                 if output.claude_refresh_disabled && !self.settings.refresh_path_disabled {
                     self.settings.refresh_path_disabled = true;
                     config::save(self.config.as_ref(), &self.settings);
@@ -793,8 +793,8 @@ mod tests {
     use crate::claude::{ClaudeSnapshot, ModelWindow, ProviderError, UsageWindow};
     use crate::codex::{Access, CodexSnapshot, parse_codex_rate_limits};
 
-    const CACHE: &str = include_str!("../../tests/fixtures/cached-usage-utilization.json");
-    const CODEX: &str = include_str!("../../tests/fixtures/codex-rate-limits-result.json");
+    const CACHE: &str = include_str!("../tests/fixtures/cached-usage-utilization.json");
+    const CODEX: &str = include_str!("../tests/fixtures/codex-rate-limits-result.json");
 
     fn sample_snapshot(now: i64) -> Snapshot {
         let mut claude = crate::claude::parse_snapshot(

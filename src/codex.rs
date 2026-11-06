@@ -1,9 +1,6 @@
-//! The Codex provider (RFC-002): a short-lived `codex app-server` is asked
+//! The Codex provider: a short-lived `codex app-server` is asked
 //! the documented read-only `account/rateLimits/read` method. No thread,
 //! turn, auth mutation, credit, or reset method is ever sent.
-//!
-//! Port of `src/lib/codex_snapshot.js`, `src/lib/codex_fetcher.js` and
-//! `src/lib/codex_source.js`.
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -256,7 +253,7 @@ pub fn parse_codex_rate_limits(result: &Value, now: i64) -> CodexSnapshot {
 }
 
 // ---------------------------------------------------------------------------
-// IO: the App Server read (codex_fetcher.js)
+// IO: the App Server read
 // ---------------------------------------------------------------------------
 
 const REQUEST_ID: u64 = 2;
@@ -388,7 +385,7 @@ pub async fn fetch_codex_snapshot(config: &CodexConfig, now: i64) -> CodexSnapsh
 }
 
 // ---------------------------------------------------------------------------
-// Policy (codex_source.js)
+// Policy
 // ---------------------------------------------------------------------------
 
 pub const DEFAULT_CODEX_REFRESH_AFTER_MS: i64 = 60_000;
@@ -489,8 +486,8 @@ impl CodexSource {
 mod tests {
     use super::*;
 
-    const RESULT: &str = include_str!("../../tests/fixtures/codex-rate-limits-result.json");
-    const RESPONSE: &str = include_str!("../../tests/fixtures/codex-app-server-response.json");
+    const RESULT: &str = include_str!("../tests/fixtures/codex-rate-limits-result.json");
+    const RESPONSE: &str = include_str!("../tests/fixtures/codex-app-server-response.json");
 
     #[test]
     fn parses_the_real_capture_main_bucket_first() {
@@ -610,11 +607,11 @@ mod tests {
     async fn fake_app_server_round_trip_and_timeout() {
         let fake = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../tests/fixtures/bin/codex-app-server"
+            "/tests/fixtures/bin/codex-app-server"
         );
         let fixture = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../tests/fixtures/codex-app-server-response.json"
+            "/tests/fixtures/codex-app-server-response.json"
         );
         let config = CodexConfig {
             app_server_argv: vec![fake.into(), "emit-file".into(), fixture.into()],

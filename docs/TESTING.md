@@ -25,28 +25,16 @@ Every fixed bug should leave behind a test that fails without the fix.
 Every new user-facing behavior should have a test that would fail if the behavior
 disappeared.
 
-## Risk Matrix
+## Applet coverage
 
-The rows this project settled on (VISION G1 first — it is the reason the
-project exists):
+- `src/claude.rs` tests cache parsing and the zero-cost refresh tripwire.
+- `src/codex.rs` tests rate-limit parsing and fake App Server requests.
+- `src/model.rs` tests panel and popup state derived from provider snapshots.
+- `src/scheduler.rs` tests polling backoff.
+- `src/window.rs` contains layout checks and the opt-in offscreen renderer.
 
-| Risk / failure mode | User impact | Test layer | Coverage |
-|---|---|---|---|
-| A refresh spends Claude tokens (G1) | The meter costs what it measures | Unit + gate | `fetcher.test.js` zero-cost envelope assertions, `source.test.js::model_invoked_permanently_disables_the_refresh_path` plus its persisted-flag suite (`persisted_disable_holds_from_the_first_fetch`, `explicit_re_enable_re_arms_the_refresh_path_and_the_tripwire`), `scripts/quality.d/50-fixtures` invariants every gate run |
-| Provider schema drift | Wrong or fabricated numbers | Unit | `snapshot.test.js` for Claude; `codex_snapshot.test.js` for App Server multi-bucket/fallback parsing, nullable window metadata, access/reached state, and reset-credit count (wrong-typed consumed field ⇒ whole provider snapshot unparseable) |
-| Codex App Server hangs, exits, or leaks a child | Shell resources degrade; Codex freezes | Unit/integration | `codex_fetcher.test.js` success, absent binary, garbage, early EOF, timeout, and process-reaping cases |
-| One provider failure hides the other | Healthy usage disappears | Unit | `multi_source.test.js`, composite cases in `indicator_model.test.js` and `menu_model.test.js` |
-| A specialized Codex model is mistaken for ordinary usage | Panel falsely says all Codex is blocked | Unit + manual | `indicator_model.test.js::specialized_codex_limits_never_take_over_the_main_meter`, grouped/reached cases in `menu_model.test.js`, SMOKE-TEST items 1, 4, 7, 26 |
-| Authoritative Codex access/reached state is ignored | A usable-looking percentage contradicts the backend | Unit + manual | access/reached suites in `codex_snapshot.test.js`, `indicator_model.test.js`, and `menu_model.test.js`; SMOKE-TEST items 4 and 6 |
-| Repeated model labels or dynamic metadata resize/overlap the menu | Detail becomes wide or unreadable | Unit + manual | grouped/bounded cases in `menu_model.test.js`; fixed-width and transformed-bounds checks in SMOKE-TEST item 7 |
-| Missing/unreadable/signed-out data shown as `0%` | Honesty failure (UX §1) | Unit + manual | `indicator_model.test.js::unavailable_shows_no_number_anywhere_in_any_mode`, `menu_model.test.js` §4.5 notices, SMOKE-TEST items 14–16 |
-| Stale data presented as current | User trusts an hour-old number | Unit + manual | `derive.test.js` stale precedence, `indicator_model.test.js` dimming/qualifier, SMOKE-TEST item 17 |
-| Fetch failure breaks the poll loop | Indicator freezes silently | Unit | `scheduler.test.js` (error snapshots engage backoff; rejecting fetch surfaces as unavailable, never throws into the mainloop) |
-| Eternal no-op CLI spawns on signed-out/API-key setups (#19) | Battery/CPU spent on a source that cannot recover by itself (VISION principle 2) | Unit | `source.test.js::signed_out_polls_stop_spawning_after_max_ineffective_refreshes` plus its re-arm suite (`manual_refresh_spawns_while_suspended_and_re_arms_auto_refreshes`, `sign_in_after_give_up_re_arms_the_stale_refresh_path`); menu opens must not re-open the loop (#23): `degraded_pipeline.test.js::menu_open_after_give_up_neither_spawns_nor_re_arms`, `scheduler.test.js::only_the_refresh_button_fetch_is_flagged_manual` |
-| Raw error strings reach the menu | Unreadable UI, leaked paths | Unit | `menu_model.test.js::raw_error_strings_never_surface_in_the_menu_model` |
-| Garbage GSettings values (CLI writes) | Broken thresholds/cadence | Unit | `settings_model.test.js` normalize/cross-clamp suite, `settings_live.test.js` |
-| enable/disable leaks timers or signals | Shell degrades over sessions | Unit + manual | `scheduler.test.js` stop/lifecycle tests, `login1.test.js` bus-unsubscribe tests, SMOKE-TEST item 19 (cycle + soak) |
-| Widget behavior only a Shell can show (focus, keyboard, a11y names, theme) | Inaccessible or illegible UI | Manual | `docs/SMOKE-TEST.md` items 7–13, 20–28 |
+Use a COSMIC session to verify panel placement, popup interaction, and live
+settings changes.
 
 ## Local Quality Gate
 

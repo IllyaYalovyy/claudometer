@@ -1,11 +1,9 @@
-//! The Claude Code provider (RFC-001 Option C): the `cachedUsageUtilization`
+//! The Claude Code provider: the `cachedUsageUtilization`
 //! object in `~/.claude.json` is the only parse surface; the proven
 //! token-free `claude -p /usage --output-format json` spawn only refreshes
 //! it, behind the G1 zero-cost tripwire.
 //!
-//! Port of `src/lib/snapshot.js`, `src/lib/fetcher.js` and
-//! `src/lib/source.js`. Everything in this module runs on the applet's
-//! tokio executor thread, never on the UI thread.
+//! Fetches run on the applet's Tokio executor.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -16,7 +14,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-/// Failure taxonomy shared by both providers (RFC-001 Design).
+/// Failure taxonomy shared by both providers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderError {
     /// The client was never run here (cache absent) or is not on `PATH`.
@@ -26,7 +24,7 @@ pub enum ProviderError {
     NotAuthenticated,
     /// Schema drift or an unreadable file: never coerced, never guessed.
     Unparseable,
-    /// RFC-002 Codex process/protocol failure (transient; backoff handles it).
+    /// Codex process/protocol failure (transient; backoff handles it).
     ReadFailed,
 }
 
@@ -45,7 +43,7 @@ pub struct ModelWindow {
     pub window: UsageWindow,
 }
 
-/// The UX-DESIGN §2 Claude display contract. Error snapshots carry only
+/// The Claude display contract. Error snapshots carry only
 /// `fetched_at` (the attempt time) and `error`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClaudeSnapshot {
@@ -182,7 +180,7 @@ pub fn parse_snapshot(raw: &[u8], now: i64) -> ClaudeSnapshot {
 }
 
 // ---------------------------------------------------------------------------
-// IO: file read and the injectable refresh spawn (fetcher.js)
+// IO: file read and the injectable refresh spawn
 // ---------------------------------------------------------------------------
 
 /// Refresh outcomes beyond the parser's taxonomy: `RefreshFailed` covers the
@@ -270,7 +268,7 @@ fn is_zero(value: Option<&Value>) -> bool {
     value.and_then(Value::as_f64) == Some(0.0)
 }
 
-/// G1 tripwire (RFC-001 drift detection 2): the envelope must positively
+/// Zero-cost tripwire: the envelope must positively
 /// assert zero model involvement; wrong-typed or missing counters fail too.
 fn asserts_zero_cost(envelope: &Map<String, Value>) -> bool {
     if !is_zero(envelope.get("num_turns"))
@@ -366,10 +364,10 @@ pub async fn refresh_cache(config: &ClaudeConfig) -> Result<(), RefreshFailure> 
 }
 
 // ---------------------------------------------------------------------------
-// Policy: when to spawn (source.js)
+// Policy: when to spawn
 // ---------------------------------------------------------------------------
 
-/// The staleness threshold that triggers a refresh spawn; the UX §6 poll
+/// The staleness threshold that triggers a refresh spawn; the poll
 /// interval, which also spaces spawns at least one poll apart.
 pub const DEFAULT_REFRESH_AFTER_MS: i64 = 60_000;
 
@@ -471,7 +469,7 @@ impl ClaudeSource {
             self.refresh_disabled.store(true, Ordering::Relaxed);
             eprintln!(
                 "claudometer: refresh envelope could not prove zero model cost; \
-                 permanently disabling the CLI refresh path (RFC-001 G1 tripwire)"
+                 permanently disabling the CLI refresh path"
             );
             return;
         }
@@ -500,9 +498,9 @@ impl ClaudeSource {
 mod tests {
     use super::*;
 
-    const CACHE: &str = include_str!("../../tests/fixtures/cached-usage-utilization.json");
-    const ENVELOPE: &str = include_str!("../../tests/fixtures/claude-p-usage-result.json");
-    const SIGNED_OUT: &str = include_str!("../../tests/fixtures/claude-p-usage-signed-out.json");
+    const CACHE: &str = include_str!("../tests/fixtures/cached-usage-utilization.json");
+    const ENVELOPE: &str = include_str!("../tests/fixtures/claude-p-usage-result.json");
+    const SIGNED_OUT: &str = include_str!("../tests/fixtures/claude-p-usage-signed-out.json");
 
     fn wrapped(cache: &str) -> Vec<u8> {
         format!(r#"{{"numStartups": 3, "cachedUsageUtilization": {cache}}}"#).into_bytes()

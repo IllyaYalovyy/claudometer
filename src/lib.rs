@@ -1,10 +1,8 @@
 //! Claudometer for the COSMIC™ desktop: a panel applet showing Claude Code
 //! and Codex usage limits without ever starting a model turn to check.
 //!
-//! This is a port of the GNOME Shell extension in `../src`. The module split
-//! mirrors `src/lib/` there: the parsers, data sources, scheduling policy and
-//! render models are pure and unit-tested; `window.rs` only maps the models
-//! onto libcosmic widgets.
+//! The parsers, data sources, scheduling policy and render models have unit
+//! tests. `window.rs` maps the models onto libcosmic widgets.
 
 mod claude;
 mod codex;

@@ -1,250 +1,242 @@
-# Claudometer
+# Claudometer for COSMIC™
 
-[![Sponsor](https://img.shields.io/badge/Sponsor-IllyaYalovyy-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/IllyaYalovyy)
+A [COSMIC](https://system76.com/cosmic) panel applet that shows Claude Code
+and Codex usage in the panel — how close each provider is to its current rate
+limits — without ever starting a model turn to check.
 
-A GNOME Shell extension that shows Claude Code and Codex usage in the top
-panel — how close each provider is to its current rate limits — without ever
-starting a model turn to check.
+This is a third-party applet. It is not official COSMIC software and is not
+endorsed by System76. COSMIC™ is a trademark of System76, Inc.
 
 ## What it shows
 
-- Two compact symbol-and-meter pairs in the top panel: an original warm bloom
-  evoking Claude and an original teal neural ring evoking Codex. Each wider
-  vertical meter shows the relevant provider constraint (Claude overall,
-  Codex main included usage); their combined width is fixed.
-- A dropdown with every Claude and Codex window, including model-specific
-  buckets. Providers and Codex models are named once above their own rows.
-  Its width is fixed and long model names are shortened rather than resizing
-  the popup.
-- A preferences window for alert thresholds and refresh cadence. Panel
-  position and the compact representation are deliberately fixed.
-
-Claudometer reads Claude Code's local usage state and asks the documented
-Codex App Server account endpoint for Codex quota metadata. It never starts a
-Claude or Codex model turn. See `VISION.md`,
-`designs/RFC-001-usage-data-source.md`, and
-`designs/RFC-002-multi-provider-usage.md` for the boundaries.
-
-Requirements: GNOME Shell 49 and at least one locally installed provider
-client. Claude Code and Codex are detected independently; a missing or signed
-out provider is explicitly unavailable while the other keeps working.
-API-key-only setups without subscription windows remain out of scope.
-
-## Install
-
-### From a release zip
-
-Download `claudometer-v<version>.shell-extension.zip` from the
-[releases page](https://github.com/IllyaYalovyy/claudometer/releases) and
-run:
-
-```bash
-gnome-extensions install --force claudometer-v<version>.shell-extension.zip
-```
-
-GNOME Shell only discovers newly installed extensions at startup: on
-Wayland, log out and log back in (on X11, restarting the shell with
-Alt+F2, `r` also works). Then enable it:
-
-```bash
-gnome-extensions enable claudometer@illyayalovyy.github.io
-```
-
-### From source
-
-```bash
-git clone https://github.com/IllyaYalovyy/claudometer.git
-cd claudometer
-./scripts/package.sh
-gnome-extensions install --force dist/claudometer-v*.shell-extension.zip
-```
-
-`scripts/package.sh` runs the full quality gate first and refuses to pack
-if it fails. The artifact version comes from `version-name` in
-`src/metadata.json`.
-
-For the fast development loop (symlinked working tree, headless-Shell
-manual testing, reading logs), see `docs/DEVELOPING.md`.
-
-## Using Claudometer
-
-Once enabled, the two compact meters appear in the top panel and need no
-setup. Claudometer polls each installed provider every minute. Claude's meter
-shows its highest usage window; Codex's shows only the main included-usage
-bucket, so a separately metered model such as Spark cannot make all Codex usage
-look blocked.
-
-**What the indicator states mean:**
+- Two compact symbol-and-meter pairs in the panel: an original warm bloom
+  evoking Claude and an original teal neural ring evoking Codex, each beside a
+  narrow vertical meter filled from the bottom to that provider's constraint
+  (Claude: its highest window; Codex: its main included-usage bucket only).
+  The pair has a fixed footprint in every state, so loading, stale and
+  unavailable transitions never make the panel breathe.
+- A fixed-width popup with every Claude and Codex window, including
+  model-specific buckets: provider heading, one compact section per window
+  (title, bar, percentage, reset time), Codex bucket names once above their
+  duration rows, earned rate-limit resets as quiet metadata, and a footer with
+  per-provider freshness, a refresh button and a settings button.
+- Inline settings: warning and critical thresholds, poll interval, and the
+  zero-token tripwire re-arm. Changes apply live and persist through
+  cosmic-config.
 
 | You see | Meaning |
 |---|---|
-| Blue vertical fill | Normal — Claude's highest percent or Codex's main included-usage percent |
-| Yellow fill | Warning — 80% used (threshold configurable) |
-| Red fill | Critical at 95%+, or an explicit backend reached/blocked state |
-| Dimmed symbol and meter | That provider's last known data is stale |
+| Accent-colored vertical fill | Normal — Claude's highest percent or Codex's main included-usage percent |
+| Warning-colored fill | Warning — 80% used (threshold configurable) |
+| Error-colored fill | Critical at 95%+, or an explicit Codex reached/blocked state |
+| Dimmed symbol and meter | That provider's last known data is stale (older than 3× the poll interval) |
 | Dimmed slashed empty meter | That provider is unavailable; the other remains independent |
 
-**Click the meters** for detail: compact Claude and Codex groups contain one
-section per quota window with a progress bar and reset time. Codex model names
-are grouped above their duration rows, and any available rate-limit resets are
-shown once as quiet read-only metadata. A footer shows freshness for both
-providers and a manual refresh button. The menu is fully keyboard-operable
-(arrows, Enter on the footer refreshes, Esc closes).
+Hovering the strip shows the full story as a tooltip (percent, reset time,
+staleness, reached states) — the applet never shows a number its data source
+did not provide.
 
-**Preferences** (Extensions app → Claudometer → settings, or
-`gnome-extensions prefs claudometer@illyayalovyy.github.io`):
+## Data sources and the no-model-turn guarantee
 
-- *Warning / Critical at* — the state thresholds (kept strictly ordered)
-- *Interval* — poll cadence, 30 s to 10 min
+- **Claude Code** — reads the `cachedUsageUtilization` object in
+  `~/.claude.json`. When that cache is older than the poll interval the applet
+  runs `claude -p /usage --output-format json`, which the CLI handles without
+  a model call; the CLI's JSON envelope is checked by the zero-cost
+  tripwire and never parsed for data. If an envelope ever fails to prove zero
+  model cost, the refresh path is disabled, persisted across restarts, and
+  only re-enabled from the settings page.
+- **Codex** — starts `codex app-server` only long enough to send
+  `initialize`, `initialized` and `account/rateLimits/read`, then stops it.
+  No thread or turn is ever started.
 
-All changes apply immediately; no re-enable needed.
+Both reads run concurrently on the applet's executor thread; the panel keeps
+its previous state until a new snapshot lands. Unavailable providers back off
+(1 → 2 → 5 min) and give up re-spawning after three ineffective attempts
+until the next manual refresh. Opening the popup refreshes implicitly if the
+last fetch is older than 15 s.
 
-### Troubleshooting
+## Requirements
 
-- **"Claude Code was not found on this system."** — Claudometer reads a
-  local Claude Code installation. Install it, run `claude` once, and hit
-  the refresh button in the dropdown.
-- **"Can't read usage data."** — Claude Code is installed but signed out
-  (or has no usage cache yet). Open `claude`, sign in, then refresh.
-  API-key-only (pay-per-token) setups show this state permanently by
-  design — there are no rate-limit windows to display.
-- **"Codex was not found on this system."** — Install the Codex CLI and hit
-  refresh. If it is installed but unavailable, open Codex, sign in with your
-  ChatGPT account, then refresh.
+- A COSMIC desktop session with `cosmic-panel`.
+- At least one locally installed and signed-in provider client (`claude`
+  and/or `codex`). The applet looks on `PATH`, then in `~/.local/bin` and
+  `~/bin`. API-key-only setups without subscription windows render as
+  unavailable by design.
+
+## Build and install from source
+
+### 1. Install the build tools
+
+**Rust (stable).** Use a current stable toolchain for the pinned libcosmic
+dependencies. Install it with [rustup](https://rustup.rs):
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+**System libraries.** The applet links `libxkbcommon` and loads the Wayland
+client libraries at runtime; libcosmic needs a C compiler and `pkg-config`
+to build.
+
+| Distribution | Packages |
+|---|---|
+| Pop!_OS / Ubuntu / Debian | `sudo apt install build-essential pkg-config git libxkbcommon-dev libwayland-dev` |
+| Fedora | `sudo dnf install gcc pkgconf-pkg-config git libxkbcommon-devel wayland-devel` |
+| Arch | `sudo pacman -S base-devel pkgconf git libxkbcommon wayland` |
+
+**`just` (optional).** The recipes below use [`just`](https://github.com/casey/just)
+(`cargo install just`, or your distribution's package). Every recipe has a
+plain-shell equivalent further down, so `just` is a convenience, not a
+requirement.
+
+### 2. Get the source
+
+```sh
+git clone https://github.com/IllyaYalovyy/claudometer.git
+cd claudometer
+```
+
+### 3. Build
+
+```sh
+just build-release          # equivalent: cargo build --release
+```
+
+The first build compiles libcosmic and takes a few minutes; later builds are
+incremental. The binary lands at `target/release/cosmic-ext-applet-claudometer`.
+On a machine without a usable GPU, build the software-rendering variant
+instead:
+
+```sh
+just build-no-wgpu          # equivalent: cargo build --release --no-default-features
+```
+
+### 4. Install
+
+System-wide (the panel finds it immediately):
+
+```sh
+sudo just install
+```
+
+Per-user, without root (COSMIC also reads applets from `~/.local/share`):
+
+```sh
+just prefix=$HOME/.local install
+```
+
+Without `just`, run the same four `install` commands by hand (replace
+`/usr` with `$HOME/.local` for a per-user install):
+
+```sh
+APPID=io.github.illyayalovyy.cosmic-ext-applet-claudometer
+PREFIX=/usr
+sudo install -Dm0755 target/release/cosmic-ext-applet-claudometer "$PREFIX/bin/cosmic-ext-applet-claudometer"
+sudo install -Dm0644 "data/$APPID.desktop" "$PREFIX/share/applications/$APPID.desktop"
+sudo install -Dm0644 "data/icons/$APPID-symbolic.svg" "$PREFIX/share/icons/hicolor/scalable/apps/$APPID-symbolic.svg"
+sudo install -Dm0644 "data/$APPID.metainfo.xml" "$PREFIX/share/metainfo/$APPID.metainfo.xml"
+```
+
+A per-user install needs `~/.local/bin` on the `PATH` of the COSMIC session
+(it is by default on Pop!_OS), because the desktop entry starts the applet by
+its bare command name.
+
+### 5. Add the applet to the panel
+
+1. Open **Settings → Desktop → Panel** (or **Dock**).
+2. Choose **Configure panel applets**.
+3. Find **Claudometer** and add it to a panel section.
+
+A freshly installed applet may not appear in that list until you log out and
+back in; restarting `cosmic-panel` alone is sometimes not enough. Once added,
+the two meters show up immediately and the first fetch completes within a few
+seconds. If a provider is not installed or signed out, its meter shows the
+slashed unavailable state and the popup explains what to do.
+
+### Upgrading
+
+Pull the new source, rebuild, and reinstall with the same prefix:
+
+```sh
+git pull
+just build-release
+sudo just install            # or: just prefix=$HOME/.local install
+```
+
+Then remove the applet from the panel and add it again (or log out and back
+in) so the panel restarts the new binary.
+
+### Uninstalling
+
+```sh
+sudo just uninstall          # or: just prefix=$HOME/.local uninstall
+```
+
+This removes the binary, desktop entry, icon and metainfo. Settings stay
+under `~/.config/cosmic/io.github.illyayalovyy.cosmic-ext-applet-claudometer/`;
+delete that directory to reset them.
+
+### Build troubleshooting
+
+- **Cargo reports an unsupported edition or Rust version** — install or
+  update the stable toolchain through rustup.
+- **`failed to run custom build command` mentioning `xkbcommon` or
+  `pkg-config`** — install the system packages from the table above.
+- **The applet opens as a floating window instead of in the panel** — it was
+  started outside `cosmic-panel`. Add it through Panel settings; do not run
+  the binary by hand.
+- **Nothing happens after adding it** — check the panel's journal for lines
+  starting with `claudometer:`: `journalctl --user -f | grep claudometer`.
+
+## Settings
+
+Click the gear in the popup footer:
+
+- **Warning at / Critical at** — the state thresholds (kept strictly ordered).
+- **Interval** — poll cadence, 30 s to 10 min. The stale boundary follows it
+  (3× the interval).
+- **Re-enable refresh** — appears only after the zero-token tripwire fired.
+
+Values are stored under `~/.config/cosmic/io.github.illyayalovyy.cosmic-ext-applet-claudometer/v1/`
+and the applet reloads them live. Times honor the COSMIC clock applet's
+12/24-hour setting.
+
+## Troubleshooting
+
+- **"Claude Code was not found on this system."** — install Claude Code, run
+  `claude` once, then press refresh.
+- **"Can't read Claude Code usage data."** — Claude Code is installed but
+  signed out or has no usage cache yet. Open `claude`, sign in, then refresh.
+- **"Codex was not found on this system."** / **"Can't read Codex usage
+  data."** — install Codex, or open it and sign in with your ChatGPT account,
+  then refresh.
 - **Stale (dimmed) more often than expected** — the Claude CLI throttles
-  rewrites of its local usage cache (a few minutes between updates is
-  normal). Brief stale windows on a working setup are a known cosmetic
-  issue ([#16](https://github.com/IllyaYalovyy/claudometer/issues/16)).
-- **Data stays stale and the journal says "disabling the CLI refresh
-  path"** — the zero-token tripwire fired: a refresh could not prove it
-  made no model calls, so Claudometer stopped running the CLI (across
-  restarts too) and only reads the local cache. If you have verified the
-  cause — typically a CLI update, see the journal line — re-enable
-  explicitly:
+  rewrites of its usage cache (a few minutes between updates is normal).
+- **Data stays stale and the settings page offers "Re-enable refresh"** — the
+  zero-token tripwire fired. Check the panel's journal (`journalctl --user -f`
+  and look for `claudometer:` lines) for the cause before re-enabling.
 
-  ```bash
-  gsettings set org.gnome.shell.extensions.claudometer refresh-path-disabled false
-  ```
+Diagnostics go to stderr (the panel's journal), never into the popup.
 
-- Diagnostics land in the journal, never in the menu:
-  `journalctl -f -o cat /usr/bin/gnome-shell | grep -i claudometer`.
+## Development
 
-**The no-model-turn guarantee:** checking usage never starts a model turn.
-The Claude path reads a local cache; its optional `claude -p "/usage"`
-refresh is guarded by the existing zero-token tripwire. The Codex path starts
-`codex app-server` only long enough to call the documented read-only
-`account/rateLimits/read` method; it never starts a thread or turn.
-
-## COSMIC desktop
-
-The same meters and dropdown are available as a native COSMIC™ panel applet
-under [`cosmic/`](cosmic/README.md), a separate Rust crate that shares this
-repository's design documents and test fixtures. See its README for build and
-install instructions.
-
-## Status
-
-The MVP plus RFC-002's Claude/Codex panel meters and multi-provider dropdown
-are implemented. The data sources are decided in
-`designs/RFC-001-usage-data-source.md` and
-`designs/RFC-002-multi-provider-usage.md`. The original MVP work is tracked
-in the [MVP milestone](https://github.com/IllyaYalovyy/claudometer/milestone/1).
-Known follow-up work from the post-MVP review is tracked under the
-[`post-mvp` label](https://github.com/IllyaYalovyy/claudometer/labels/post-mvp).
-
-## Contributing
-
-See `CONTRIBUTING.md` for the working rules and quality bar. If you clone
-this repository fresh, install the local AI-file commit guard (it lives in
-`.git/hooks/`, which `git clone` never carries):
-
-```bash
-./scripts/install-git-hooks.sh
+```sh
+cargo test                       # parsers, models, scheduler, layout checks
+just check                       # fmt + clippy + tests
+just render /tmp/claudometer     # offscreen PNGs of popup and panel states
 ```
 
-### Project Workflow
+In `src/`, `claude.rs` and `codex.rs` hold the parsers,
+fetchers and refresh policy, `model.rs` the pure render models, `marks.rs`
+the generated SVG marks and meters, `scheduler.rs` the backoff state machine,
+`config.rs` the cosmic-config settings, and `window.rs` the libcosmic
+applet. Parser tests run against the captures in `tests/fixtures/`.
 
-The default workflow is intentionally simple:
+The offscreen render harness in `src/window.rs` is adapted from
+[cosmic-ext-applet-codexbar](https://github.com/andrew-verde/cosmic-ext-applet-codexbar)
+(MIT, Copyright (c) Andrew Verde).
 
-1. Write or update the user task / problem statement.
-2. Create an RFC for broad, irreversible, cross-cutting, or dependency-adding
-   changes.
-3. Implement in small reviewable steps.
-4. Add tests at the layer where the risk lives.
-5. Run `./scripts/quality.sh`.
-6. Review for behavior, regressions, secrets, and maintainability before merge.
+## License
 
-### Repository Layout
-
-```text
-.
-├── AGENTS.md                    # Instructions for AI coding agents
-├── CONTRIBUTING.md              # Contributor rules and quality bar
-├── VISION.md                    # Problem, approach, and what this is not
-├── designs/
-│   ├── RFC-001-usage-data-source.md  # Decided: zero-token data source
-│   ├── RFC-002-multi-provider-usage.md # Claude + Codex source/UI design
-│   ├── UX-DESIGN.md             # Panel indicator + dropdown UX design
-│   └── USER-TASKS.md            # User workflow inventory
-├── docs/
-│   ├── DEVELOPING.md            # Dev loop: install, headless Shell, logs
-│   ├── PROCESS.md               # How work moves from idea to merge
-│   ├── COMMITS.md               # Commit identity, staging, and message rules
-│   ├── TESTING.md               # Testing strategy
-│   ├── RELEASE.md               # Release checklist
-│   └── prompts/                 # Copy-ready AI prompts for common workflows
-├── src/                         # The extension (lib/ is pure, gjs-testable)
-├── tests/                       # Headless unit tests + committed fixtures
-└── scripts/
-    ├── quality.sh               # Local quality gate (hooks in quality.d/)
-    └── package.sh               # Build the installable release zip
-```
-
-### Quality Gate
-
-Run the local quality gate before asking for review:
-
-```bash
-./scripts/quality.sh
-```
-
-It checks shell syntax, `metadata.json`, the GSettings schema, JS syntax,
-the committed fixtures, and runs the headless unit tests. Project-specific
-checks live as executable files under `scripts/quality.d/`.
-
-### Design Documents
-
-Use `designs/RFC-000-template.md` for changes that are hard to reverse,
-touch multiple parts of the system, add dependencies, or change external
-behavior. Use `designs/USER-TASKS.md` to keep user-facing workflows
-explicit and testable.
-
-This repository was initialized from `ai-proj-template`; see
-`docs/TEMPLATE-RATIONALE.md` for the practices it carries.
-
-### AI Prompt Templates
-
-Reusable prompts live in `docs/prompts/`:
-
-- `task.md` - turn a request into a scoped task
-- `rfc.md` - draft or revise an RFC
-- `implement.md` - implement accepted work
-- `review.md` - review a diff or branch
-- `commit.md` - prepare a clean commit
-
-### Task Tracking
-
-Work toward the MVP is tracked as GitHub issues under the
-[MVP milestone](https://github.com/IllyaYalovyy/claudometer/milestone/1),
-ordered by dependency. Each issue is a self-contained specification with
-acceptance criteria and test requirements; the issue body is the source of
-truth for its task, and completed tasks are closed with a completion report
-comment.
-
-### AI Task Runner (local only)
-
-This project uses `ktask`, a local project-agnostic AI CLI task orchestrator,
-to drive queued implementation tasks. `ktask init` creates `.ktask/` in the
-repository root; it is gitignored and blocked by the pre-commit guard, so it
-never reaches the remote. Anyone working on this repo runs `ktask init`
-locally to recreate it — see `ktask --help` or the tool's own README.
+See [LICENSE](LICENSE) for the MIT license.
