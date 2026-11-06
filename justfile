@@ -55,6 +55,10 @@ _install_bin:
 # Installs files into the system (use `just prefix=$HOME/.local install` for a user install)
 install: _install_icon _install_desktop _install_metainfo _install_bin
 
+# Installs the applet for the current user
+install-user:
+    just prefix="$HOME/.local" install
+
 # Uninstalls the applet from the system
 uninstall:
     rm -f {{bindir}}/{{name}}
